@@ -410,19 +410,24 @@ const createEmptyStudentForm = (programaId = '') => ({
   documentos_completos: true, fecha_limite_documentos: ''
 });
 
+// Mapa de programas. FUENTE DE VERDAD: `programas_estudio` en la BD
+// (alineado el 2026-11-19 con la semantica real de `estudiantes.programa_id`,
+//  verificado por cruce de DNI contra admision_postulantes).
+// Si se cambia un id aqui, cambiarlo tambien en StudentDetail.jsx,
+// EditStudentModal.jsx y tupaCatalog.js.
 const PROGRAMAS = [
   { id: 'ALL', label: 'Todos los Programas' },
-  { id: '1', label: 'Administración de Operaciones Turísticas' },
-  { id: '2', label: 'Asistencia Administrativa' },
-  { id: '3', label: 'Contabilidad' },
-  { id: '4', label: 'Construcción Civil' },
-  { id: '5', label: 'Gestión Administrativa' },
-  { id: '6', label: 'Desarrollo de Sistemas de Información' },
+  { id: '1', label: 'Desarrollo de Sistemas de Información' },
+  { id: '2', label: 'Enfermería Técnica' },
+  { id: '3', label: 'Asistencia Administrativa' },
+  { id: '4', label: 'Gestión Administrativa' },
+  { id: '5', label: 'Contabilidad' },
+  { id: '6', label: 'Mecatrónica Automotriz' },
   { id: '7', label: 'Electricidad Industrial' },
-  { id: '8', label: 'Enfermería Técnica' },
-  { id: '9', label: 'Manejo Forestal' },
-  { id: '10', label: 'Mecatrónica Automotriz' },
-  { id: '11', label: 'Producción Agropecuaria' },
+  { id: '8', label: 'Administración de Operaciones Turísticas' },
+  { id: '9', label: 'Construcción Civil' },
+  { id: '10', label: 'Producción Agropecuaria' },
+  { id: '11', label: 'Manejo Forestal' },
 ];
 
 const PROGRAMAS_OPTIONS = [
@@ -490,8 +495,11 @@ function ProgramaFilter({ value, onChange }) {
           <span className="block text-sm font-bold text-slate-text truncate">{selected.label}</span>
         </span>
         {!isAll && (
-          <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md bg-primary text-white text-[10px] font-bold shadow-sm shadow-primary/40">
-            {selected.id}
+          <span
+            title={`ID del programa en la base de datos: ${selected.id}`}
+            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold border border-slate-200"
+          >
+            ID {selected.id}
           </span>
         )}
         <ChevronDown size={18} className={`flex-shrink-0 text-primary transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
@@ -622,7 +630,7 @@ export function StudentMaster() {
         const fallbackId = user?.email === 'secretaria_prog@siga.edu' ? '2' : '1';
         setCurrentPrograma(user?.programa_id ? String(user.programa_id) : fallbackId);
       } else {
-        handleSearch(searchTerm);
+        handleSearch(searchTerm, { immediate: true });
       }
     }
   }, [currentPrograma, userRole]);
@@ -639,20 +647,29 @@ export function StudentMaster() {
     };
   }, [showModal]);
 
-  const handleSearch = async (val = '') => {
-    setSearchTerm(val);
-    setCurrentPage(1);
+  // --- Control de la busqueda -------------------------------------------------
+  // Sin AbortController ni debounce, una respuesta lenta podia llegar despues
+  // de una rapida y dejar la tabla en blanco ("0 registrados").
+  const searchAbortRef = useRef(null);
+  const searchTimerRef = useRef(null);
+
+  const cargarEstudiantes = async (val = '') => {
+    if (searchAbortRef.current) searchAbortRef.current.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+
     setLoading(true);
     setLoadError(null);
     try {
       let url = `${API_BASE}/api/mod-gestion-academica/estudiantes/`;
 
       if (currentPrograma && currentPrograma !== 'ALL') {
-        url += `?programa_id=${currentPrograma}`;
+        url += `?programa_id=${encodeURIComponent(currentPrograma)}`;
       }
 
       const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        signal: controller.signal
       });
 
       if (!res.ok) {
@@ -664,7 +681,6 @@ export function StudentMaster() {
         console.error('API Error:', detalle);
         setStudents([]);
         setLoadError(detalle);
-        setLoading(false);
         return;
       }
 
@@ -674,37 +690,70 @@ export function StudentMaster() {
         console.error('Respuesta degradada:', detalle);
         setStudents([]);
         setLoadError(detalle);
-        setLoading(false);
         return;
       }
 
       const data = await res.json();
-      const dataArray = Array.isArray(data) ? data : [];
-      const sorted = [...dataArray].sort(compareStudentsByCarrera);
+
+      // Si el backend no devuelve una lista, NO es "sin estudiantes": es un error.
+      if (!Array.isArray(data)) {
+        const detalle = (data && (data.detail || data.message || data.error))
+          || 'El servicio de estudiantes devolvio una respuesta inesperada.';
+        console.error('Respuesta inesperada del backend:', data);
+        setStudents([]);
+        setLoadError(detalle);
+        return;
+      }
+
+      const sorted = [...data].sort(compareStudentsByCarrera);
 
       const term = String(val || '').trim();
-      if (term.length >= 3) {
+      if (term.length >= 1) {
         const lowerTerm = term.toLowerCase();
+        const palabras = lowerTerm.split(/\s+/).filter(Boolean);
         const filtered = sorted.filter(s => {
           const dni = String(s.dni ?? '');
+          const codigo = String(s.codigo_estudiante ?? '');
           const nombres = String(s.nombres ?? '').toLowerCase();
           const apellidos = String(s.apellidos ?? '').toLowerCase();
-          const codigo = String(s.codigo_estudiante ?? '');
-          return dni.includes(term)
-            || nombres.includes(lowerTerm)
-            || apellidos.includes(lowerTerm)
-            || codigo.includes(term);
+          const completo = `${nombres} ${apellidos}`.trim();
+          if (dni.includes(term) || codigo.includes(term)) return true;
+          // "Juan Perez" debe coincidir aunque apellidos y nombres
+          // esten en campos distintos.
+          if (palabras.length > 1) return palabras.every(p => completo.includes(p));
+          return nombres.includes(lowerTerm) || apellidos.includes(lowerTerm);
         });
         setStudents(filtered);
       } else {
         setStudents(sorted);
       }
     } catch (e) {
+      if (e && e.name === 'AbortError') return; // cancelada a proposito
       console.error(e);
       setStudents([]);
       setLoadError('No se pudo conectar con el servidor. Verifique que el backend este levantado.');
+    } finally {
+      if (searchAbortRef.current === controller) {
+        searchAbortRef.current = null;
+        setLoading(false);
+      }
     }
-    setLoading(false);
+  };
+
+  /**
+   * Actualiza el texto de busqueda y recarga la lista (con debounce).
+   * @param {string} val        texto a filtrar
+   * @param {object} opciones   { immediate: true } salta el debounce
+   */
+  const handleSearch = (val = '', { immediate = false } = {}) => {
+    setSearchTerm(val);
+    setCurrentPage(1);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (immediate) {
+      cargarEstudiantes(val);
+    } else {
+      searchTimerRef.current = setTimeout(() => cargarEstudiantes(val), 300);
+    }
   };
 
   const handleFotoChange = (e) => {
@@ -836,12 +885,18 @@ export function StudentMaster() {
         metadata_admision,
       };
 
-      // Garantizar asignación obligatoria de programa_id
+      // `programa_id` ya es obligatorio en el paso 1 (SECTOR_REQUIRED), asi que
+      // aqui siempre hay uno. Antes existia un ultimo recurso que asignaba el
+      // programa 1 o 2 en silencio y dejaba al estudiante en la carrera equivocada.
       const assignedProg = form.programa_id
         || (currentPrograma && currentPrograma !== 'ALL' ? currentPrograma : null)
-        || (user?.programa_id ? String(user.programa_id) : null)
-        || (user?.email === 'secretaria_prog@siga.edu' ? '2' : '1');
-      payload.programa_id = parseInt(assignedProg, 10);
+        || (user?.programa_id ? String(user.programa_id) : null);
+      const programaFinal = Number.parseInt(assignedProg, 10);
+      if (!Number.isInteger(programaFinal)) {
+        toast.warning('Falta el programa de estudios. Selecciona la carrera en el paso 1.');
+        return;
+      }
+      payload.programa_id = programaFinal;
 
       const res = await fetch(`${API_BASE}/api/mod-gestion-academica/estudiantes/`, {
         method: 'POST',
@@ -856,7 +911,8 @@ export function StudentMaster() {
         setForm(createEmptyStudentForm(form.programa_id));
         setWizardStep(1);
         setShowMissing(false);
-        handleSearch('');
+        // Se conserva el texto de busqueda que el usuario tenia escrito.
+        handleSearch(searchTerm, { immediate: true });
         return;
       }
 
@@ -935,7 +991,7 @@ export function StudentMaster() {
       if (resIngesta.ok) {
         const result = await resIngesta.json();
         toast.success(`Sincronización exitosa. ${result.estudiantes_creados} nuevos estudiantes ingresados al Core.`);
-        handleSearch('');
+        handleSearch(searchTerm, { immediate: true });
       } else {
         const err = await resIngesta.text();
         toast.error(`Error en la ingesta: ${err}`);
@@ -945,6 +1001,44 @@ export function StudentMaster() {
       toast.error(e.message);
     }
     setLoading(false);
+  };
+
+  const handleEliminarEstudiante = async (s) => {
+    if (!['superadmin', 'admin'].includes(userRole)) {
+      toast.error('Solo el Super Admin o el Admin pueden eliminar estudiantes.');
+      return;
+    }
+
+    const ok = await toast.confirm({
+      title: 'Eliminar estudiante',
+      message: `Se eliminará a ${s.nombres} ${s.apellidos} (DNI ${s.dni}, código ${s.codigo_estudiante}). Esta acción no se puede deshacer.`,
+      type: 'danger',
+      confirmText: 'Sí, eliminar'
+    });
+    if (!ok) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/mod-gestion-academica/estudiantes/${s.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+
+      if (!res.ok) {
+        let detalle = `HTTP ${res.status}`;
+        try {
+          const cuerpo = await res.json();
+          detalle = cuerpo.detail || detalle;
+        } catch { /* cuerpo no-JSON */ }
+        toast.error(`No se pudo eliminar: ${detalle}`);
+        return;
+      }
+
+      toast.success(`${s.nombres} ${s.apellidos} fue eliminado del registro.`);
+      handleSearch(searchTerm, { immediate: true });
+    } catch (e) {
+      console.error(e);
+      toast.error('No se pudo conectar con el servidor.');
+    }
   };
 
   const handleNext = () => {
@@ -1339,7 +1433,7 @@ export function StudentMaster() {
           )}
           {searchTerm.length > 0 && (
             <button
-              onClick={() => handleSearch('')}
+              onClick={() => handleSearch('', { immediate: true })}
               aria-label="Limpiar busqueda"
               className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
             >
@@ -1357,7 +1451,7 @@ export function StudentMaster() {
             <p className="mt-0.5 text-red-700">{loadError}</p>
           </div>
           <button
-            onClick={() => handleSearch(searchTerm)}
+            onClick={() => handleSearch(searchTerm, { immediate: true })}
             className="shrink-0 rounded-lg border border-red-300 bg-white px-3 py-1.5 font-medium hover:bg-red-100"
           >
             Reintentar
@@ -1567,6 +1661,17 @@ export function StudentMaster() {
                             <Pencil size={13} />
                             <span>Editar</span>
                           </button>
+                          {['superadmin', 'admin'].includes(userRole) && (
+                            <button
+                              type="button"
+                              onClick={() => handleEliminarEstudiante(s)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold text-rose-800 bg-rose-100/80 hover:bg-rose-600 hover:text-white border border-rose-300 transition-all shadow-xs"
+                              title="Eliminar estudiante del registro"
+                            >
+                              <Trash2 size={13} />
+                              <span>Eliminar</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1760,7 +1865,7 @@ export function StudentMaster() {
           onClose={() => setEditingStudent(null)}
           onUpdated={() => {
             setEditingStudent(null);
-            handleSearch('');
+            handleSearch(searchTerm, { immediate: true });
           }}
         />
       )}

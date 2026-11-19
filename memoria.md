@@ -141,9 +141,12 @@ El stack corre **exclusivamente en Docker**. Se detuvieron el servicio nativo `p
 |----------|-----|--------------|
 | Core Gateway | http://localhost:8000 | `admin@siga.edu` / `admin123` |
 | Frontend (Docker) | http://localhost:3000 | — |
-| Postgres (Docker) | localhost:5432 | `postgres` / **`john.007`** / db `siga_core` |
+| Postgres (Docker) | localhost:5432 | `postgres` / **`wilson21`** / db `siga_core` |
 
-> ⚠️ El `.env` local conserva la contraseña nativa `61077615`, pero **docker-compose.yml la sobreescribe con `john.007`**. No mezclar.
+> ⚠️ La contraseña real de PostgreSQL local es **`wilson21`**. Los scripts
+> `start_local.ps1`, `siga_backend/alembic/env.py` y los `database.py` de los
+> módulos usan este valor por defecto (corregido 2026-11-19). **No** usar
+> `john.007` ni `dariana`: son credenciales antiguas que ya no existen.
 
 Login correcto: `POST /auth/login?email=admin@siga.edu&password=admin123`.
 (`/api/core/auth/login` devuelve 401: el middleware exige token en esa ruta.)
@@ -357,9 +360,10 @@ D:\SIGA\
 ## 0.10 SESIÓN 8 — CONEXIÓN BD + DOCKER (2026-10-27)
 
 ### 0.10.1 Configuración Base de Datos
-- PostgreSQL local (17.4): contraseña de postgres cambiada de 61077615 a john.007
+- PostgreSQL local (17.4): contraseña vigente **`wilson21`** (históricamente 61077615 → john.007 → hoy `wilson21`)
 - Base de datos: creada siga_core con tablas del sistema
-- .env raíz: DB_HOST=host.docker.internal, DB_PORT=5432, DB_USER=postgres, DB_PASSWORD=john.007, DB_NAME=siga_core
+- .env raíz: DB_HOST=localhost, DB_PORT=5432, DB_USER=postgres, DB_PASSWORD=wilson21, DB_NAME=siga_core
+  - Nota: `DB_NAME=siga_suiza_2026` **no existe**; las bases reales son `siga_core` y `siga_test`.
 
 ### 0.10.2 Docker Compose
 - Stack levantado con docker compose up -d (nats, redis, core, 7 módulos, frontend)

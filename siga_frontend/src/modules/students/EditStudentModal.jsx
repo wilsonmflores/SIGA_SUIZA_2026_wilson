@@ -9,19 +9,31 @@ import {
   Building2, Activity, GraduationCap, HeartPulse, ShieldCheck
 } from 'lucide-react';
 
+// Ver StudentMaster.jsx: fuente de verdad = tabla `programas_estudio` de la BD.
 const PROGRAMAS = {
-  1: 'Administración de Operaciones Turísticas',
-  2: 'Asistencia Administrativa',
-  3: 'Contabilidad',
-  4: 'Construcción Civil',
-  5: 'Gestión Administrativa',
-  6: 'Desarrollo de Sistemas de Información',
+  1: 'Desarrollo de Sistemas de Información',
+  2: 'Enfermería Técnica',
+  3: 'Asistencia Administrativa',
+  4: 'Gestión Administrativa',
+  5: 'Contabilidad',
+  6: 'Mecatrónica Automotriz',
   7: 'Electricidad Industrial',
-  8: 'Enfermería Técnica',
-  9: 'Manejo Forestal',
-  10: 'Mecatrónica Automotriz',
-  11: 'Producción Agropecuaria',
+  8: 'Administración de Operaciones Turísticas',
+  9: 'Construcción Civil',
+  10: 'Producción Agropecuaria',
+  11: 'Manejo Forestal',
 };
+
+const PROGRAMAS_OPTIONS = [
+  { value: '', label: 'Seleccione una carrera...' },
+  ...Object.entries(PROGRAMAS)
+    .map(([id, label]) => ({ value: String(id), label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'es')),
+];
+
+// Valores de `estado_academico` que el resto del sistema reconoce
+// (StudentMaster los usa para pintar el badge del estudiante).
+const ESTADOS_ACADEMICOS = ['postulante', 'ingresante', 'matriculado', 'regular', 'estudiante'];
 
 function SearchSelect({
   label,
@@ -285,6 +297,8 @@ export function EditStudentModal({ student, onClose, onUpdated }) {
         distrito: meta.distrito || meta.ubigeo?.distrito || '',
         contacto_emergencia_nombre: meta.emergencia?.contacto_nombre || meta.apoderado?.nombre || meta.contacto_emergencia_nombre || '',
         contacto_emergencia_telefono: meta.emergencia?.contacto_telefono || meta.apoderado?.celular || meta.contacto_emergencia_telefono || '',
+        programa_id: student.programa_id != null ? String(student.programa_id) : '',
+        estado_academico: student.estado_academico || 'postulante',
       });
       setShowConfirmModal(false);
       setError(null);
@@ -360,6 +374,13 @@ export function EditStudentModal({ student, onClose, onUpdated }) {
         email_personal: form.email_personal?.trim() || null,
         celular: form.celular?.trim() || null,
         direccion_domicilio: form.direccion_domicilio?.trim() || null,
+        // Solo se envian si el usuario los cambio de verdad; asi no se pisa
+        // un valor que otro proceso (matricula) haya actualizado.
+        ...(form.programa_id !== '' && form.programa_id != null
+          && Number(form.programa_id) !== Number(student.programa_id)
+          ? { programa_id: Number(form.programa_id) } : {}),
+        ...(form.estado_academico && form.estado_academico !== student.estado_academico
+          ? { estado_academico: form.estado_academico } : {}),
         metadata_admision: meta,
       };
 
@@ -455,7 +476,7 @@ export function EditStudentModal({ student, onClose, onUpdated }) {
           <div className="bg-blue-50/80 border-2 border-blue-200 p-4 rounded-2xl text-xs text-blue-900 flex items-start gap-3 shadow-xs">
             <ShieldAlert size={18} className="text-primary shrink-0 mt-0.5" />
             <div className="leading-relaxed font-semibold">
-              <strong className="text-primary-dark font-black">Ámbito de Edición:</strong> Solo se permite modificar datos personales de contacto, identidad y domicilio del estudiante (corrección de errores tipográficos). La carrera, el código de estudiante y el estado de matrícula son inmutables para preservar la trazabilidad institucional.
+              <strong className="text-primary-dark font-black">Ámbito de Edición:</strong> Aquí se corrigen los datos personales de contacto, identidad y domicilio, y se puede reasignar la <strong>carrera</strong> o el <strong>estado académico</strong> si fueron cargados por error. El código de estudiante sigue siendo inmutable para preservar la trazabilidad institucional.
             </div>
           </div>
 
@@ -463,11 +484,23 @@ export function EditStudentModal({ student, onClose, onUpdated }) {
 
             {/* Bloque 1: Datos Académicos (SOLO LECTURA) */}
             <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs">
-              <SectionHeader icon={GraduationCap} title="Datos Institucionales Asignados" subtitle="Campos protegidos no editables" />
+              <SectionHeader icon={GraduationCap} title="Datos Institucionales Asignados" subtitle={`Carrera actual: ${carreraNombre} · el código es inmutable`} />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <EditField label="Código de Estudiante" value={student.codigo_estudiante} readOnly icon={Lock} />
-                <EditField label="Programa de Estudios" value={carreraNombre} readOnly icon={Lock} />
-                <EditField label="Estado Académico" value={student.estado_academico || 'postulante'} readOnly icon={Lock} />
+                <SearchSelect
+                  label="Programa de Estudios"
+                  icon={GraduationCap}
+                  value={form.programa_id}
+                  onChange={(v) => handleChange('programa_id', v)}
+                  options={PROGRAMAS_OPTIONS}
+                  placeholder="Seleccione una carrera..."
+                />
+                <EditField
+                  label="Estado Académico"
+                  value={form.estado_academico}
+                  onChange={(v) => handleChange('estado_academico', v)}
+                  options={ESTADOS_ACADEMICOS}
+                />
               </div>
             </div>
 

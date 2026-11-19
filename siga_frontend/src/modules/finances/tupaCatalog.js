@@ -113,10 +113,12 @@ export const PAYMENT_METHODS = [
   { id: 'tarjeta_pos', nombre: 'Tarjeta POS (Débito/Crédito)', icono: 'CreditCard', descripcion: 'Pago con tarjeta Visa / Mastercard en módulo' }
 ];
 
+// Ver StudentMaster.jsx: fuente de verdad = tabla `programas_estudio` de la BD.
 export const CAREERS_MAP = {
+  1: 'Desarrollo de Sistemas de Información',
   2: 'Enfermería Técnica',
-  3: 'Gestión Administrativa',
-  4: 'Asistencia Administrativa',
+  3: 'Asistencia Administrativa',
+  4: 'Gestión Administrativa',
   5: 'Contabilidad',
   6: 'Mecatrónica Automotriz',
   7: 'Electricidad Industrial',
@@ -124,5 +126,4 @@ export const CAREERS_MAP = {
   9: 'Construcción Civil',
   10: 'Producción Agropecuaria',
   11: 'Manejo Forestal',
-  15: 'Desarrollo de Sistemas de Información'
 };

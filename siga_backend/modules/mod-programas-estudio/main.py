@@ -22,13 +22,8 @@ app = FastAPI(
 app.include_router(router)
 
 
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "module": "mod-programas-estudio",
-        "version": "1.0.0"
-    }
+# El /health lo expone el router (routes.py), que se registra primero.
+# Habia un segundo @app.get("/health") aqui que nunca era alcanzable.
 
 
 @app.get("/manifest")

@@ -459,16 +459,10 @@ async def obtener_malla(programa_id: int, db: AsyncSession = Depends(get_db)):
 
     return malla
 
-@router.delete("/programas/{programa_id}")
-async def eliminar_programa(programa_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ProgramaEstudio).where(ProgramaEstudio.id == programa_id))
-    programa = result.scalar_one_or_none()
-    if not programa:
-        raise HTTPException(status_code=404, detail="Programa no encontrado")
-
-    programa.estado = "inactivo"
-    await db.commit()
-    return {"message": "Programa eliminado correctamente"}
+# NOTA: existia aqui una segunda definicion de DELETE /programas/{programa_id}
+# (baja logica a estado="inactivo"). Starlette registra las rutas en orden, asi
+# que la de la linea 235 (borrado real con validacion) siempre gano y este
+# bloque nunca era alcanzable. Se elimino como codigo muerto.
 
 # --- Schemas Coordinación (Carga Lectiva y Horarios) ---
 class CargaLectivaBase(BaseModel):

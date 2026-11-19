@@ -17,7 +17,7 @@ config = context.config
 db_url = os.getenv("DB_URL")
 if not db_url:
     user = os.getenv("DB_USER", "postgres")
-    password = os.getenv("DB_PASSWORD", "john.007")
+    password = os.getenv("DB_PASSWORD", "wilson21")
     host = os.getenv("DB_HOST", "host.docker.internal")
     port = os.getenv("DB_PORT", "5432")
     dbname = os.getenv("DB_NAME", "siga_core")

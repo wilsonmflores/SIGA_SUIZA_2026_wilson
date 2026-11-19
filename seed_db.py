@@ -96,17 +96,17 @@ except Exception as e:
 print('Creando programas de estudio (11 carreras)...')
 try:
     cur.execute("""INSERT INTO programas_estudio (id, codigo, nombre, creditos_totales, duracion_periodos, modalidad, estado) VALUES
-    (1, 'ENF', 'Enfermería Técnica', 30, 6, 'presencial', 'activo'),
-    (2, 'CON', 'Contabilidad', 29, 6, 'presencial', 'activo'),
-    (3, 'MET', 'Mecatrónica Automotriz', 0, 6, 'presencial', 'activo'),
-    (4, 'GAS-ADM', 'Gestión Administrativa', 0, 6, 'presencial', 'activo'),
-    (5, 'PRO-AG', 'Producción Agropecuaria', 0, 6, 'presencial', 'activo'),
-    (6, 'CON-CIV', 'Construcción Civil', 0, 6, 'presencial', 'activo'),
-    (7, 'DSI', 'Desarrollo de Sistemas de Información', 28, 6, 'presencial', 'activo'),
-    (8, 'ELT', 'Electricidad Industrial', 27, 6, 'presencial', 'activo'),
-    (9, 'AOT', 'Administración de Operaciones Turísticas', 0, 6, 'presencial', 'activo'),
-    (10, 'MAN-FOR', 'Manejo Forestal', 0, 6, 'presencial', 'activo'),
-    (11, 'ASI-ADM', 'Asistencia Administrativa', 0, 6, 'presencial', 'activo')
+    (1, '0584722', 'DESARROLLO DE SISTEMAS DE INFORMACION', 126, 6, 'presencial', 'activo'),
+    (2, 'Q3286-3-003', 'Enfermería Técnica', 129, 6, 'presencial', 'activo'),
+    (3, 'ASI-ADM', 'Asistencia Administrativa', 0, 6, 'presencial', 'activo'),
+    (4, 'M2982-3-001', 'Gestión Administrativa', 131, 6, 'presencial', 'activo'),
+    (5, 'CON', 'Contabilidad', 0, 6, 'presencial', 'activo'),
+    (6, 'G2145-3-001', 'Mecatrónica Automotriz', 129, 6, 'presencial', 'activo'),
+    (7, 'ELT', 'Electricidad Industrial', 0, 6, 'presencial', 'activo'),
+    (8, 'AOT', 'Administración de Operaciones Turísticas', 0, 6, 'presencial', 'activo'),
+    (9, 'CON-CIV', 'Construcción Civil', 0, 6, 'presencial', 'activo'),
+    (10, 'PRO-AG', 'Producción Agropecuaria', 0, 6, 'presencial', 'activo'),
+    (11, 'MAN-FOR', 'Manejo Forestal', 0, 6, 'presencial', 'activo')
     ON CONFLICT (id) DO NOTHING;""")
     print('[OK] Programas creados')
 except Exception as e:

@@ -8,17 +8,33 @@ $frontend = Join-Path $root "siga_frontend"
 $python = Join-Path $backend "venv\Scripts\python.exe"
 
 if (-not (Test-Path $python)) {
-    Write-Host "ERROR: no existe $python" -ForegroundColor Red
-    Write-Host "Crealo con:  py -3.14 -m venv siga_backend\venv" -ForegroundColor Yellow
-    Write-Host "Y luego:      siga_backend\venv\Scripts\python -m pip install -r siga_backend\requirements.txt" -ForegroundColor Yellow
-    exit 1
+    # Sin venv usamos el Python del sistema (o el lanzador py de Windows).
+    Write-Host "AVISO: no existe $python - se usara el Python del sistema." -ForegroundColor Yellow
+    $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyLauncher) {
+        $python = "py"
+        $pythonArgs = @("-3")
+    } else {
+        $sysPy = Get-Command python -ErrorAction SilentlyContinue
+        if (-not $sysPy) {
+            Write-Host "ERROR: no hay Python disponible. Instalalo o crea el venv con:" -ForegroundColor Red
+            Write-Host "  py -3 -m venv siga_backend\venv" -ForegroundColor Yellow
+            Write-Host "  siga_backend\venv\Scripts\python -m pip install -r siga_backend\requirements.txt" -ForegroundColor Yellow
+            exit 1
+        }
+        $python = "python"
+        $pythonArgs = @()
+    }
+    Write-Host "  (si algo falla, crealo con:  py -3 -m venv siga_backend\venv)" -ForegroundColor DarkGray
+} else {
+    $pythonArgs = @()
 }
 
 # Base de datos local
 $env:DB_HOST     = "localhost"
 $env:DB_PORT     = "5432"
 $env:DB_USER     = "postgres"
-$env:DB_PASSWORD = "john.007"
+$env:DB_PASSWORD = "wilson21"
 $env:DB_NAME     = "siga_core"
 $env:SKIP_MIGRATIONS = "true"
 
@@ -43,7 +59,7 @@ foreach ($m in $modulos) {
 
 Write-Host " Levantando Core en http://localhost:8000  (docs: /docs)" -ForegroundColor Cyan
 Start-Process -FilePath $python -WorkingDirectory $backend -ArgumentList `
-    "-m","uvicorn","app.main:app","--host","0.0.0.0","--port","8000","--reload" `
+    (@($pythonArgs) + @("-m","uvicorn","app.main:app","--host","0.0.0.0","--port","8000","--reload")) `
     -WindowStyle Minimized
 
 Start-Sleep -Seconds 2
@@ -53,7 +69,7 @@ foreach ($m in $modulos) {
     if (-not (Test-Path $dir)) { Write-Host "  (falta) $($m.n)" -ForegroundColor Red; continue }
     Write-Host " Levantando $($m.n) en http://localhost:$($m.p)" -ForegroundColor Cyan
     Start-Process -FilePath $python -WorkingDirectory $dir -ArgumentList `
-        "-m","uvicorn","main:app","--host","0.0.0.0","--port","$($m.p)","--reload" `
+        (@($pythonArgs) + @("-m","uvicorn","main:app","--host","0.0.0.0","--port","$($m.p)","--reload")) `
         -WindowStyle Minimized
     Start-Sleep -Milliseconds 700
 }

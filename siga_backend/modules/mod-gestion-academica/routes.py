@@ -235,7 +235,12 @@ async def obtener_estudiantes(programa_id: Optional[int] = None, db: AsyncSessio
     except Exception as e:
         tb = traceback.format_exc()
         print(f"[ERROR] obtener_estudiantes: {e}\n{tb}")
-        return {"error": str(e), "type": type(e).__name__, "traceback": tb}
+        # Un error tiene que ser un error HTTP. Antes devolvia 200 con un dict,
+        # el frontend lo leia como lista vacia y mostraba "0 registrados".
+        raise HTTPException(
+            status_code=500,
+            detail=f"No se pudo cargar la lista de estudiantes: {type(e).__name__}: {e}",
+        )
 
 @router.get("/estudiantes/siguiente-codigo")
 async def obtener_siguiente_codigo(db: AsyncSession = Depends(get_db)):
