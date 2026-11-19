@@ -13,11 +13,11 @@ DB_NAME = os.getenv("DB_NAME", "siga_suiza_2026")
 # Construir DATABASE_URL (síncrona)
 DATABASE_URL = os.getenv("DATABASE_URL_SYNC") or os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 elif DATABASE_URL.startswith("postgresql+asyncpg://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
 elif DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 
 print(f"🔗 Conectando a: {DB_HOST}:{DB_PORT}/{DB_NAME}")
 

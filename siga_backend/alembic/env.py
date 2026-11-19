@@ -21,9 +21,12 @@ if not db_url:
     host = os.getenv("DB_HOST", "host.docker.internal")
     port = os.getenv("DB_PORT", "5432")
     dbname = os.getenv("DB_NAME", "siga_core")
-    db_url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}"
+    db_url = f"postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}"
     config.set_main_option("sqlalchemy.url", db_url)
 else:
+    # SQLAlchemy 2.x no acepta el esquema legacy "postgres://"
+    if db_url.startswith("postgres://"):
+        db_url = "postgresql://" + db_url[len("postgres://"):]
     config.set_main_option("sqlalchemy.url", db_url)
 
 # Convertir asyncpg a psycopg (sync) para migraciones síncronas

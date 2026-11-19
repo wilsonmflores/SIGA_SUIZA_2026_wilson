@@ -1,0 +1,40 @@
+# === Contexto de build del Backend (Dockerfile raiz) ===
+# El Dockerfile solo hace COPY siga_backend -> /app, asi que todo lo
+# demas solo infla el contexto de build y el upload a Railway.
+
+# Frontend (se despliega aparte, en Vercel)
+siga_frontend/
+
+# Volcados y respaldos de base de datos (contienen datos reales)
+*.sql
+*.dump
+backups/
+
+# Planillas Excel con datos institucionales
+*.xlsx
+
+# Documentacion y notas (no se necesita en la imagen)
+docs/
+*.md
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Git y utilidades locales
+.git/
+.github/
+.vscode/
+.idea/
+
+# Artefactos Python
+**/__pycache__/
+**/*.pyc
+**/venv/
+**/.venv/
+**/.pytest_cache/
+
+# Artefactos Node
+**/node_modules/
+**/dist/

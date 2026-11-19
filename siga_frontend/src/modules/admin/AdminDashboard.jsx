@@ -82,7 +82,7 @@ export function AdminDashboard({ onNavigate }) {
           <div className="text-slate-500 text-sm font-medium uppercase tracking-wider mb-2">Entorno</div>
           <div className="flex items-center justify-center">
             <Settings className="w-6 h-6 text-slate-500 mr-2" />
-            <h1 className="text-2xl font-extrabold text-slate-text capitalize">{systemStatus?.environment || 'N/A'}</h1>
+            <h1 className="text-2xl font-extrabold text-slate-text capitalize break-words min-w-0">{systemStatus?.environment || 'N/A'}</h1>
           </div>
         </div>
       </div>
@@ -286,7 +286,7 @@ export function AdminDashboard({ onNavigate }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="p-5 rounded-xl bg-slate-50 border border-slate-100 hover:shadow-md transition-shadow">
             <div className="text-slate-500 text-sm font-medium mb-1">Entorno Activo</div>
-            <div className="text-2xl font-bold text-slate-text capitalize">{systemStatus?.environment || 'N/A'}</div>
+            <div className="text-2xl font-bold text-slate-text capitalize break-words">{systemStatus?.environment || 'N/A'}</div>
           </div>
           <div className="p-5 rounded-xl bg-slate-50 border border-slate-100 hover:shadow-md transition-shadow">
             <div className="text-slate-500 text-sm font-medium mb-1">Versión del Core</div>

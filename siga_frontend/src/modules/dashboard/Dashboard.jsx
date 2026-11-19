@@ -77,9 +77,9 @@ export function Dashboard({ onNavigate }) {
             <span className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
               <Server size={22} />
             </span>
-            <div>
+            <div className="min-w-0">
               <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-0.5">Entorno</div>
-              <div className="text-3xl font-extrabold text-indigo-600 capitalize">{systemStatus.environment}</div>
+              <div className="text-2xl font-extrabold text-indigo-600 capitalize break-words leading-tight">{systemStatus.environment}</div>
               <div className="text-xs font-medium text-slate-400 mt-1">
                 v{systemStatus.core_version}
               </div>

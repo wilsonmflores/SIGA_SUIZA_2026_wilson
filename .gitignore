@@ -71,3 +71,6 @@ dump_railway.sql
 siga_core_inserts.sql
 dump_*.sql
 backups/
+
+.vercel
+.env*

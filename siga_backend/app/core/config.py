@@ -2,6 +2,19 @@ from pydantic_settings import BaseSettings
 from typing import List, Optional
 from pydantic import Field
 
+
+def _normalize_postgres_scheme(url: str) -> str:
+    """Convierte el esquema legacy 'postgres://' en 'postgresql://'.
+
+    SQLAlchemy 2.x ya no acepta 'postgres://' y lanza NoSuchModuleError.
+    Railway y otros proveedores aun entregan el formato antiguo en
+    DATABASE_URL, asi que lo normalizamos antes de usarlo.
+    """
+    if url.startswith("postgres://"):
+        return "postgresql://" + url[len("postgres://"):]
+    return url
+
+
 class CoreSettings(BaseSettings):
     """Configuración centralizada del Core con resiliencia"""
     
@@ -59,22 +72,22 @@ class CoreSettings(BaseSettings):
     @property
     def database_url(self) -> str:
         if self.DATABASE_URL:
-            url = self.DATABASE_URL
+            url = _normalize_postgres_scheme(self.DATABASE_URL)
             if url.startswith("postgresql://"):
                 url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
             return url
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-    
+
     @property
     def database_sync_url(self) -> str:
         if self.DATABASE_URL:
-            url = self.DATABASE_URL
+            url = _normalize_postgres_scheme(self.DATABASE_URL)
             if url.startswith("postgresql+asyncpg://"):
-                url = url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+                url = url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
             elif url.startswith("postgresql://"):
-                url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+                url = url.replace("postgresql://", "postgresql+psycopg://", 1)
             return url
-        return f"postgresql+psycopg2://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"postgresql+psycopg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
     
     @property
     def redis_url_effective(self) -> str:
