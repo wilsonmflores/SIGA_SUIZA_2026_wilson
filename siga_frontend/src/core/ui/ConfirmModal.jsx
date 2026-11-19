@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { createPortal } from 'react-dom';
 import { AlertTriangle, HelpCircle, FileText, X } from 'lucide-react';
 
-const ConfirmContext = createContext(null);
+export const ConfirmContext = createContext(null);
 
 /**
  * Contenido interno del modal cuando está activo.

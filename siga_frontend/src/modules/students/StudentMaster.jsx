@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../../core/auth/useAuth';
 import { API_BASE } from '../../core/api/client';
 import { useToast } from '../../core/ui/ToastContext';
+import { useConfirm } from '../../core/ui/ConfirmModal';
 import techBg from '../../assets/tech-bg.jpg';
 import { EditStudentModal } from './EditStudentModal';
 import { StudentDetail } from './StudentDetail';
@@ -542,9 +543,17 @@ function ProgramaFilter({ value, onChange }) {
 export function StudentMaster() {
   const { user } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
   const userRoles = user?.roles ? user.roles.map(r => typeof r === 'string' ? r : r.nombre || r.name) : [];
   const primaryRole = user?.is_superuser ? 'superadmin' : (userRoles.length > 0 ? userRoles[0] : (user?.role || 'invitado'));
   const userRole = primaryRole;
+  const canDeleteStudent = Boolean(
+    user?.is_superuser ||
+    userRoles.includes('superadmin') ||
+    userRoles.includes('admin') ||
+    userRole === 'superadmin' ||
+    userRole === 'admin'
+  );
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -684,7 +693,7 @@ export function StudentMaster() {
         return;
       }
 
-      if (res.headers.get('X-Fallback') === 'true') {
+      if (res.headers?.get && res.headers.get('X-Fallback') === 'true') {
         const detalle = res.headers.get('X-Fallback-Message')
           || 'El servicio de estudiantes respondio con datos degradados.';
         console.error('Respuesta degradada:', detalle);
@@ -1004,23 +1013,34 @@ export function StudentMaster() {
   };
 
   const handleEliminarEstudiante = async (s) => {
-    if (!['superadmin', 'admin'].includes(userRole)) {
+    if (!canDeleteStudent) {
       toast.error('Solo el Super Admin o el Admin pueden eliminar estudiantes.');
       return;
     }
 
-    const ok = await toast.confirm({
-      title: 'Eliminar estudiante',
-      message: `Se eliminará a ${s.nombres} ${s.apellidos} (DNI ${s.dni}, código ${s.codigo_estudiante}). Esta acción no se puede deshacer.`,
-      type: 'danger',
-      confirmText: 'Sí, eliminar'
-    });
-    if (!ok) return;
-
     try {
+      const confirmFn = confirm?.confirm || confirm || toast?.confirm;
+      if (!confirmFn) {
+        throw new Error('No se encontró el servicio de confirmación.');
+      }
+
+      const ok = await confirmFn({
+        title: 'Eliminar estudiante',
+        message: `Se eliminará a ${s.nombres} ${s.apellidos} (DNI ${s.dni}, código ${s.codigo_estudiante}). Esta acción no se puede deshacer.`,
+        type: 'danger',
+        confirmText: 'Sí, eliminar'
+      });
+      if (!ok) return;
+
+      const headers = {};
+      const token = localStorage.getItem('token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${API_BASE}/api/mod-gestion-academica/estudiantes/${s.id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers
       });
 
       if (!res.ok) {
@@ -1034,10 +1054,13 @@ export function StudentMaster() {
       }
 
       toast.success(`${s.nombres} ${s.apellidos} fue eliminado del registro.`);
+      setStudents(prev => prev.filter(item => item.id !== s.id));
+      if (selectedStudent?.id === s.id) setSelectedStudent(null);
+      if (editingStudent?.id === s.id) setEditingStudent(null);
       handleSearch(searchTerm, { immediate: true });
     } catch (e) {
       console.error(e);
-      toast.error('No se pudo conectar con el servidor.');
+      toast.error(e.message || 'No se pudo conectar con el servidor.');
     }
   };
 
@@ -1661,7 +1684,7 @@ export function StudentMaster() {
                             <Pencil size={13} />
                             <span>Editar</span>
                           </button>
-                          {['superadmin', 'admin'].includes(userRole) && (
+                          {canDeleteStudent && (
                             <button
                               type="button"
                               onClick={() => handleEliminarEstudiante(s)}

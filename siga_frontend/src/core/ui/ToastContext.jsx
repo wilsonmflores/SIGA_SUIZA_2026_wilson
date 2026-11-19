@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { ConfirmContext } from './ConfirmModal';
 
 const ToastContext = createContext(null);
 
@@ -216,6 +217,18 @@ export function useToast() {
   const context = useContext(ToastContext);
   if (!context) {
     throw new Error('useToast debe ser utilizado dentro de un ToastProvider');
+  }
+  const confirmApi = useContext(ConfirmContext);
+  if (confirmApi) {
+    const confirmFn = confirmApi.confirm || confirmApi;
+    return {
+      ...context,
+      confirm: confirmFn,
+      toast: {
+        ...context.toast,
+        confirm: confirmFn,
+      },
+    };
   }
   return context;
 }
