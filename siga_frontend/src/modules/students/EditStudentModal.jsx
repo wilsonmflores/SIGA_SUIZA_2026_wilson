@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { API_BASE } from '../../core/api/client';
+import { useProgramas, getProgramas, getProgramasActivos } from '../../core/api/programasStore';
 import techBg from '../../assets/tech-bg.jpg';
 import { DEPARTAMENTOS, getProvincias, getDistritos } from './ubigeoPeru';
 import {
@@ -9,27 +10,25 @@ import {
   Building2, Activity, GraduationCap, HeartPulse, ShieldCheck
 } from 'lucide-react';
 
-// Ver StudentMaster.jsx: fuente de verdad = tabla `programas_estudio` de la BD.
-const PROGRAMAS = {
-  1: 'Desarrollo de Sistemas de Información',
-  2: 'Enfermería Técnica',
-  3: 'Asistencia Administrativa',
-  4: 'Gestión Administrativa',
-  5: 'Contabilidad',
-  6: 'Mecatrónica Automotriz',
-  7: 'Electricidad Industrial',
-  8: 'Administración de Operaciones Turísticas',
-  9: 'Construcción Civil',
-  10: 'Producción Agropecuaria',
-  11: 'Manejo Forestal',
-};
+// Catalogo vivo de carreras: fuente de verdad = tabla `programas_estudio`
+// (core/api/programasStore.js). Solo se ofrecen programas ACTIVOS, coherente
+// con `validar_programa_activo` del backend (rechaza programas inactivos en
+// el PUT). Si el estudiante esta en un programa fuera de oferta, ese programa
+// se agrega a la lista marcado como inactivo para no perder el valor actual.
+const buildProgramasOptions = (programaActualId) => {
+  const opciones = getProgramasActivos()
+    .map(programa => ({ value: String(programa.id), label: programa.label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'es'));
 
-const PROGRAMAS_OPTIONS = [
-  { value: '', label: 'Seleccione una carrera...' },
-  ...Object.entries(PROGRAMAS)
-    .map(([id, label]) => ({ value: String(id), label }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'es')),
-];
+  if (!programaActualId) return opciones;
+
+  const actualId = String(programaActualId);
+  if (opciones.some(opcion => opcion.value === actualId)) return opciones;
+
+  const actual = getProgramas().find(programa => String(programa.id) === actualId);
+  const etiqueta = actual ? `${actual.label} (inactivo)` : `Programa ${actualId}`;
+  return [{ value: actualId, label: etiqueta }, ...opciones];
+};
 
 // Valores de `estado_academico` que el resto del sistema reconoce
 // (StudentMaster los usa para pintar el badge del estudiante).
@@ -273,10 +272,17 @@ const EditField = ({
 };
 
 export function EditStudentModal({ student, onClose, onUpdated }) {
+  // Catalogo de carreras en vivo (se invalida desde Gestion Academica).
+  useProgramas();
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Opciones de la carrera: SOLO programas activos (ver buildProgramasOptions).
+  const programasOptions = buildProgramasOptions(
+    form?.programa_id ?? (student?.programa_id != null ? String(student.programa_id) : '')
+  );
 
   useEffect(() => {
     if (student) {
@@ -420,7 +426,12 @@ export function EditStudentModal({ student, onClose, onUpdated }) {
     }
   };
 
-  const carreraNombre = PROGRAMAS[student.programa_id] || (student.programa_id ? `Programa ${student.programa_id}` : 'Sin carrera');
+  const programaActual = student?.programa_id != null
+    ? getProgramas().find(programa => String(programa.id) === String(student.programa_id))
+    : null;
+  const carreraNombre = programaActual
+    ? programaActual.label
+    : (student?.programa_id ? `Programa ${student.programa_id}` : 'Sin carrera');
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
@@ -492,7 +503,7 @@ export function EditStudentModal({ student, onClose, onUpdated }) {
                   icon={GraduationCap}
                   value={form.programa_id}
                   onChange={(v) => handleChange('programa_id', v)}
-                  options={PROGRAMAS_OPTIONS}
+                  options={programasOptions}
                   placeholder="Seleccione una carrera..."
                 />
                 <EditField

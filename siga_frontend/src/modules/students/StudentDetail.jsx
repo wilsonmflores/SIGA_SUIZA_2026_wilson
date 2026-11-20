@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { API_BASE } from '../../core/api/client';
+import { useProgramas, getProgramas } from '../../core/api/programasStore';
 import techBg from '../../assets/tech-bg.jpg';
 import { ProtectedImage } from './ProtectedImage';
 import {
@@ -11,19 +12,14 @@ import {
   Users, AlertCircle, Info, Sparkles, DollarSign, Activity
 } from 'lucide-react';
 
-// Ver StudentMaster.jsx: fuente de verdad = tabla `programas_estudio` de la BD.
-const PROGRAMAS = {
-  1: 'Desarrollo de Sistemas de Información',
-  2: 'Enfermería Técnica',
-  3: 'Asistencia Administrativa',
-  4: 'Gestión Administrativa',
-  5: 'Contabilidad',
-  6: 'Mecatrónica Automotriz',
-  7: 'Electricidad Industrial',
-  8: 'Administración de Operaciones Turísticas',
-  9: 'Construcción Civil',
-  10: 'Producción Agropecuaria',
-  11: 'Manejo Forestal',
+// Catalogo vivo de carreras: fuente de verdad = tabla `programas_estudio`
+// (core/api/programasStore.js). Se resuelve en cada render; el hook
+// `useProgramas()` dentro de StudentDetail fuerza el repintado al cambiar.
+const getNombrePrograma = (programaId) => {
+  if (!programaId) return null;
+  const programa = getProgramas().find(p => String(p.id) === String(programaId));
+  // Programa fuera del catalogo (dato historico): no se oculta, se muestra el id.
+  return programa ? programa.label : `Programa ${programaId}`;
 };
 
 const ESTADO_COLORS = {
@@ -113,6 +109,8 @@ function EmptyState({ icon: Icon, title, description }) {
 }
 
 export function StudentDetail({ student, onClose }) {
+  // Catalogo de carreras en vivo (se invalida desde Gestion Academica).
+  useProgramas();
   const [detail, setDetail] = useState(null);
   const [matriculas, setMatriculas] = useState([]);
   const [beneficios, setBeneficios] = useState([]);
@@ -198,7 +196,7 @@ export function StudentDetail({ student, onClose }) {
 
   const s = detail || student;
   const initials = `${(s.nombres || '')[0] || ''}${(s.apellidos || '')[0] || ''}`.toUpperCase();
-  const programaNombre = PROGRAMAS[s.programa_id] || (s.programa_id ? `Programa ${s.programa_id}` : 'Sin carrera asignada');
+  const programaNombre = getNombrePrograma(s.programa_id) || 'Sin carrera asignada';
 
   const fechaNac = s.fecha_nacimiento
     ? new Date(s.fecha_nacimiento + 'T00:00:00').toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -593,7 +591,7 @@ export function StudentDetail({ student, onClose }) {
                           {matriculas.map(m => (
                             <tr key={m.id} className="hover:bg-primary/5 transition-colors">
                               <td className="py-3 px-4 font-extrabold text-slate-900">Periodo {m.periodo_id}</td>
-                              <td className="py-3 px-4 text-slate-700 font-semibold">{PROGRAMAS[m.programa_id] || `Programa ${m.programa_id}`}</td>
+                              <td className="py-3 px-4 text-slate-700 font-semibold">{getNombrePrograma(m.programa_id) || 'Sin carrera asignada'}</td>
                               <td className="py-3 px-4 text-slate-600 font-bold">{m.tipo_ingreso}</td>
                               <td className="py-3 px-4 text-center">
                                 <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-black uppercase ${

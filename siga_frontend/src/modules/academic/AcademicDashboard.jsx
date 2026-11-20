@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { apiClient } from '../../core/api/client';
+import { invalidarProgramas } from '../../core/api/programasStore';
 import { useToast } from '../../core/ui/ToastContext';
 import { CurriculumMesh } from './CurriculumMesh';
 import { PeriodManager } from './PeriodManager';
@@ -271,6 +272,9 @@ export function AcademicDashboard() {
 
       await apiClient.callModule('mod-programas-estudio', 'programas', 'POST', payload);
 
+      // Refresca el catalogo de carreras que consumen Estudiantes y Tesoreria.
+      invalidarProgramas();
+
       setShowCreateModal(false);
       setCreateError('');
       setNewProgram({
@@ -312,6 +316,8 @@ export function AcademicDashboard() {
         }
       });
       setEditingProgram(null);
+      // Refresca el catalogo de carreras que consumen Estudiantes y Tesoreria.
+      invalidarProgramas();
       await fetchData();
       toast.success('Configuración de la carrera actualizada exitosamente');
     } catch (error) {
@@ -332,6 +338,9 @@ export function AcademicDashboard() {
         method: 'DELETE'
       });
       setProgramToDelete(null);
+      // Refresca el catalogo de carreras que consumen Estudiantes y Tesoreria:
+      // la carrera eliminada desaparece de los formularios y filtros.
+      invalidarProgramas();
       await fetchData();
     } catch (error) {
       console.error('Error al eliminar programa:', error);

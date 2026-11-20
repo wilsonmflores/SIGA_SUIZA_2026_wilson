@@ -27,6 +27,7 @@ from sqlalchemy.orm import selectinload
 
 from config import enrollment_settings
 from database import OutboxEvent, get_db
+from program_validation import validar_programa_activo
 from domain import (
     Casuistica,
     EstadoCurso,
@@ -301,6 +302,7 @@ async def admision_excel(
         except (TypeError, ValueError):
             prog = str(prog).strip()
             prog_id = int(prog) if prog.isdigit() else programa_id
+        await validar_programa_activo(db, prog_id)
         codigo = f"{datetime.now().year}-{reg['dni']}"
         estudiante = Estudiante(
             codigo_estudiante=codigo,

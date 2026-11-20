@@ -232,12 +232,61 @@ async def actualizar_programa(programa_id: int, programa_data: ProgramaCreate, d
     await db.refresh(programa)
     return programa
 
+async def _contar_referencias_programa(db: AsyncSession, tabla: str, columna: str, programa_id: int) -> int:
+    existe = await db.execute(
+        text("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = :tabla AND column_name = :columna
+            )
+        """),
+        {"tabla": tabla, "columna": columna},
+    )
+    if not existe.scalar():
+        return 0
+    result = await db.execute(
+        text(f'SELECT count(*) FROM "{tabla}" WHERE "{columna}" = :pid'),
+        {"pid": programa_id},
+    )
+    return int(result.scalar() or 0)
+
+
 @router.delete("/programas/{programa_id}")
 async def eliminar_programa(programa_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(ProgramaEstudio).where(ProgramaEstudio.id == programa_id))
     db_programa = result.scalar_one_or_none()
     if not db_programa:
         raise HTTPException(status_code=404, detail="Programa no encontrado")
+
+    referencias_programa = {
+        "estudiantes": "programa_id",
+        "matriculas": "programa_id",
+        "periodos_academicos": "programa_id",
+        "programa_configuraciones": "programa_id",
+        "programa_configuracion": "programa_id",
+        "programa_jerarquia": "programa_id",
+        "programa_requisitos": "programa_id",
+        "programa_modulos": "programa_id",
+        "carga_lectiva": "programa_id",
+        "horarios_periodo": "programa_id",
+        "planes_trabajo_docente": "programa_id",
+        "tutorias": "programa_id",
+    }
+    relaciones = []
+    for tabla, columna in referencias_programa.items():
+        cantidad = await _contar_referencias_programa(db, tabla, columna, programa_id)
+        if cantidad:
+            relaciones.append(f"{tabla} ({cantidad})")
+    if relaciones:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No se puede eliminar el programa porque conserva estudiantes o información académica: "
+                + ", ".join(relaciones)
+                + ". Si ya no se oferta, cambie su estado a Inactivo para conservar el historial."
+            ),
+        )
 
     # Verificar si hay estudiantes vinculados
     res_estudiantes = await db.execute(

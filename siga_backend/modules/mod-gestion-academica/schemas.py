@@ -21,7 +21,7 @@ class EstudianteBase(BaseModel):
     metadata_admision: Optional[dict] = {}
 
 class EstudianteCreate(EstudianteBase):
-    pass
+    programa_id: int
 
 class EstudianteUpdate(BaseModel):
     codigo_estudiante: Optional[str] = None

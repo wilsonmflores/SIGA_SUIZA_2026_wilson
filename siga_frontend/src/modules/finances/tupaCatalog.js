@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { tesoreriaApi } from './lib/tesoreriaApi';
+import { useProgramas } from '../../core/api/programasStore';
 
 // Tarifario TUPA, métodos de pago y reglas de cobro de Tesorería - IESTP Suiza 2026.
 // El catálogo y la configuración se guardan en la base de datos (mod-gestion-academica /tesoreria).
@@ -23,6 +24,9 @@ export const DEFAULT_CAJA_CONFIG = {
 
 // Tarifario TUPA vigente (base de datos): agregar, editar precios y eliminar conceptos
 export function useTupaCatalog() {
+  // Mantiene CAREERS_MAP (carreras) sincronizado con `programas_estudio`:
+  // al crear/eliminar una carrera en Gestion Academica, Tesoreria se repinta.
+  useProgramas();
   const [catalog, setCatalog] = useState([]);
   const [catalogError, setCatalogError] = useState('');
 
@@ -113,17 +117,8 @@ export const PAYMENT_METHODS = [
   { id: 'tarjeta_pos', nombre: 'Tarjeta POS (Débito/Crédito)', icono: 'CreditCard', descripcion: 'Pago con tarjeta Visa / Mastercard en módulo' }
 ];
 
-// Ver StudentMaster.jsx: fuente de verdad = tabla `programas_estudio` de la BD.
-export const CAREERS_MAP = {
-  1: 'Desarrollo de Sistemas de Información',
-  2: 'Enfermería Técnica',
-  3: 'Asistencia Administrativa',
-  4: 'Gestión Administrativa',
-  5: 'Contabilidad',
-  6: 'Mecatrónica Automotriz',
-  7: 'Electricidad Industrial',
-  8: 'Administración de Operaciones Turísticas',
-  9: 'Construcción Civil',
-  10: 'Producción Agropecuaria',
-  11: 'Manejo Forestal',
-};
+// Ver StudentMaster.jsx: fuente de verdad = tabla `programas_estudio` en la BD,
+// servida por core/api/programasStore.js. Se re-exporta el MISMO objeto
+// (mutado in-place por el store) para que todos los consumidores de Tesoreria
+// vean el catalogo vigente sin importarlo desde otro modulo.
+export { CAREERS_MAP } from '../../core/api/programasStore';

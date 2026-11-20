@@ -220,6 +220,9 @@ services:
     environment:
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
+      # Dentro de la red de Docker el core se resuelve por el nombre del
+      # servicio (sin esto el proxy apunta a localhost y responde 502).
+      - VITE_PROXY_TARGET=http://siga-core:8000
     volumes:
       - ./siga_frontend:/app
       - frontend_node_modules:/app/node_modules

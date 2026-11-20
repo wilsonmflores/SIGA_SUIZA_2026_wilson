@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../core/auth/useAuth';
 import { API_BASE } from '../../core/api/client';
+import { useProgramas, getProgramas, getProgramasActivos } from '../../core/api/programasStore';
 import { useToast } from '../../core/ui/ToastContext';
 import { useConfirm } from '../../core/ui/ConfirmModal';
 import techBg from '../../assets/tech-bg.jpg';
@@ -411,30 +412,28 @@ const createEmptyStudentForm = (programaId = '') => ({
   documentos_completos: true, fecha_limite_documentos: ''
 });
 
-// Mapa de programas. FUENTE DE VERDAD: `programas_estudio` en la BD
-// (alineado el 2026-11-19 con la semantica real de `estudiantes.programa_id`,
-//  verificado por cruce de DNI contra admision_postulantes).
-// Si se cambia un id aqui, cambiarlo tambien en StudentDetail.jsx,
-// EditStudentModal.jsx y tupaCatalog.js.
-const PROGRAMAS = [
-  { id: 'ALL', label: 'Todos los Programas' },
-  { id: '1', label: 'Desarrollo de Sistemas de Información' },
-  { id: '2', label: 'Enfermería Técnica' },
-  { id: '3', label: 'Asistencia Administrativa' },
-  { id: '4', label: 'Gestión Administrativa' },
-  { id: '5', label: 'Contabilidad' },
-  { id: '6', label: 'Mecatrónica Automotriz' },
-  { id: '7', label: 'Electricidad Industrial' },
-  { id: '8', label: 'Administración de Operaciones Turísticas' },
-  { id: '9', label: 'Construcción Civil' },
-  { id: '10', label: 'Producción Agropecuaria' },
-  { id: '11', label: 'Manejo Forestal' },
+// Mapa de programas. FUENTE DE VERDAD: tabla `programas_estudio` en la BD,
+// expuesta por el store (`core/api/programasStore.js`). Aqui NO se listan
+// carreras: solo se derivan las listas que necesita esta pantalla, de modo
+// que crear/editar/eliminar una carrera en Gestion Academica se refleje aqui
+// sin tocar este archivo.
+//
+// - Registro (wizard): SOLO programas `activos`, coherente con la validacion
+//   `validar_programa_activo` del backend.
+// - Filtro de la tabla: todos (para poder ver estudiantes de cualquier
+//   programa, activo o no).
+const buildProgramasOptions = () => [
+  { value: '', label: 'Seleccione una carrera...' },
+  ...getProgramasActivos().map(programa => ({
+    value: String(programa.id),
+    label: programa.label,
+  })),
 ];
 
-const PROGRAMAS_OPTIONS = [
-  { value: '', label: 'Seleccione una carrera...' },
-  ...PROGRAMAS.filter(programa => programa.id !== 'ALL').map(programa => ({
-    value: programa.id,
+const buildProgramasFilter = () => [
+  { id: 'ALL', label: 'Todos los Programas' },
+  ...getProgramas().map(programa => ({
+    id: String(programa.id),
     label: programa.label,
   })),
 ];
@@ -442,8 +441,12 @@ const PROGRAMAS_OPTIONS = [
 const TIPOS_SANGRE = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
 
 const getProgramaLabel = (programaId) => {
-  const programa = PROGRAMAS.find(item => item.id === String(programaId));
-  return programa ? programa.label : 'Sin carrera seleccionada';
+  if (!programaId) return 'Sin carrera seleccionada';
+  const programa = getProgramas().find(item => String(item.id) === String(programaId));
+  // Programa inexistente en el catalogo: se muestra el id para que no se
+  // confunda con "sin carrera" (el backend bloquea eliminar carreras con
+  // estudiantes, pero puede haber datos historicos).
+  return programa ? programa.label : `Programa ${programaId}`;
 };
 
 const compareStudentsByCarrera = (a, b) => {
@@ -460,7 +463,11 @@ const compareStudentsByCarrera = (a, b) => {
 function ProgramaFilter({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
-  const selected = PROGRAMAS.find(p => String(p.id) === String(value)) || PROGRAMAS[0];
+  // Suscripcion al catalogo: si se agrega/elimina una carrera, este filtro
+  // se repinta solo (mismo objeto conmutado por el store).
+  useProgramas();
+  const programas = buildProgramasFilter();
+  const selected = programas.find(p => String(p.id) === String(value)) || programas[0];
   const isAll = selected.id === 'ALL';
 
   useEffect(() => {
@@ -512,7 +519,7 @@ function ProgramaFilter({ value, onChange }) {
             <span className="text-[10px] font-bold uppercase tracking-wider text-primary/80">Filtrar por programa</span>
           </div>
           <div className="max-h-72 overflow-y-auto custom-scrollbar p-1.5" role="listbox">
-            {PROGRAMAS.map(p => {
+            {programas.map(p => {
               const active = String(p.id) === String(value);
               const all = p.id === 'ALL';
               return (
@@ -544,6 +551,9 @@ export function StudentMaster() {
   const { user } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
+  // Catalogo de carreras en vivo (se invalida desde Gestion Academica).
+  useProgramas();
+  const programasOptions = buildProgramasOptions();
   const userRoles = user?.roles ? user.roles.map(r => typeof r === 'string' ? r : r.nombre || r.name) : [];
   const primaryRole = user?.is_superuser ? 'superadmin' : (userRoles.length > 0 ? userRoles[0] : (user?.role || 'invitado'));
   const userRole = primaryRole;
@@ -1137,7 +1147,7 @@ export function StudentMaster() {
                   icon={GraduationCap}
                   required
                   showMissing={showMissing}
-                  options={PROGRAMAS_OPTIONS}
+                  options={programasOptions}
                   value={form.programa_id}
                   onChange={(programaId) => setForm({ ...form, programa_id: programaId })}
                   placeholder="Buscar carrera..."

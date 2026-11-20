@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from database import get_db, OutboxEvent
 from models import Estudiante, Matricula, MatriculaDetalle
 from schemas import EstudianteCreate, EstudianteResponse, EstudianteUpdate, MatriculaCreate, MatriculaResponse, IngestaMasivaRequest
+from program_validation import validar_programa_activo, contar_referencias
 from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
@@ -116,6 +117,10 @@ async def ingesta_admitidos(request: Request, data: IngestaMasivaRequest, db: As
     Crea los expedientes de estudiantes y dispara eventos para integrarlos al ecosistema (crear usuarios, matricular, etc).
     """
     estudiantes_creados = 0
+
+    # Validar todo el lote antes de insertar para evitar ingresos parciales.
+    for admitido in data.admitidos:
+        await validar_programa_activo(db, admitido.programa_id)
     
     for admitido in data.admitidos:
         # 1. Capa Anticorrupción: Validar si ya existe
@@ -170,6 +175,7 @@ async def ingesta_admitidos(request: Request, data: IngestaMasivaRequest, db: As
 
 @router.post("/estudiantes/", response_model=EstudianteResponse, status_code=status.HTTP_201_CREATED)
 async def crear_estudiante(request: Request, data: EstudianteCreate, db: AsyncSession = Depends(get_db)):
+    await validar_programa_activo(db, data.programa_id)
     existing = await db.execute(select(Estudiante).where(
         or_(Estudiante.dni == data.dni, Estudiante.codigo_estudiante == data.codigo_estudiante)
     ))
@@ -648,6 +654,8 @@ async def actualizar_estudiante(estudiante_id: int, data: EstudianteUpdate, requ
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
 
     update_data = data.model_dump(exclude_unset=True)
+    if "programa_id" in update_data:
+        await validar_programa_activo(db, update_data["programa_id"])
     for key, value in update_data.items():
         setattr(db_estudiante, key, value)
 
@@ -672,6 +680,31 @@ async def eliminar_estudiante(estudiante_id: int, request: Request, db: AsyncSes
     db_estudiante = result.scalar_one_or_none()
     if not db_estudiante:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+    referencias_estudiante = {
+        "matriculas": "estudiante_id",
+        "historial_academico": "estudiante_id",
+        "beneficios_estudiante": "estudiante_id",
+        "registros_practicas": "estudiante_id",
+        "resoluciones_convalidacion": "estudiante_id",
+        "solicitudes_tramites": "estudiante_id",
+        "tesoreria_pagos": "estudiante_id",
+        "evaluacion_registros": "estudiante_id",
+    }
+    referencias = []
+    for tabla, columna in referencias_estudiante.items():
+        cantidad = await contar_referencias(db, tabla, columna, estudiante_id)
+        if cantidad:
+            referencias.append(f"{tabla} ({cantidad})")
+    if referencias:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No se puede eliminar este estudiante porque conserva historial o movimientos: "
+                + ", ".join(referencias)
+                + ". Mantenga el expediente y registre su baja académica."
+            ),
+        )
 
     await db.delete(db_estudiante)
 
