@@ -545,6 +545,10 @@ export function AcademicDashboard() {
         }
       }
 
+      // Refresca el catalogo de carreras que consumen Estudiantes y Tesoreria:
+      // la carrera importada debe aparecer en el registro sin recargar la pagina.
+      invalidarProgramas();
+
       toast.success(`La carrera "${nombreCarrera}" (${codigoCarrera}) y su estructura curricular fueron creadas exitosamente.`);
       setShowImportModal(false);
       setImportFile(null);

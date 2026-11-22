@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { API_BASE } from './client';
 
 // ============================================================================
 // STORE DE PROGRAMAS DE ESTUDIO (carreras)
@@ -91,7 +92,11 @@ export const cargarProgramas = async ({ fuerza = false } = {}) => {
   cargaEnCurso = (async () => {
     try {
       const token = leerToken();
-      const respuesta = await fetch('/api/mod-programas-estudio/programas', {
+      // API_BASE = VITE_API_URL (produccion: URL absoluta del backend en
+      // Railway; local: cadena vacia y usa el proxy de Vite). Sin la base,
+      // en Vercel la peticion caeria en el rewrite de SPA y devolveria el
+      // index.html en lugar del catalogo.
+      const respuesta = await fetch(`${API_BASE}/api/mod-programas-estudio/programas`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
       if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
