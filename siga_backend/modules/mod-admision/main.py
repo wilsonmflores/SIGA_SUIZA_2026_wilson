@@ -11,10 +11,11 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 
 from database import engine, Base, get_db
 from models import PostulanteAdmitido
+from program_mapping import resolver_programa
 
 import sys
 sys.path.append("/app")
@@ -145,7 +146,11 @@ def parse_excel_sync(contents: bytes):
             break
     
     if b_datos_idx is None:
-        raise ValueError(f"El Excel debe contener una hoja 'B_Datos'. Hojas encontradas: {excel_data.sheet_names}")
+        raise ValueError(
+            "El archivo no parece ser de admisión: falta la hoja 'B_Datos' "
+            "(usa el archivo oficial de admisión, p. ej. ADMISION_2026.xlsx). "
+            f"Hojas encontradas: {excel_data.sheet_names}"
+        )
         
     df_reg = pd.read_excel(excel_data, sheet_name='B_Datos')
     if df_reg.shape[1] > 38:
@@ -216,7 +221,10 @@ async def upload_excel(file: UploadFile = File(...), db: AsyncSession = Depends(
         is_published = True
         
         return {"message": f"Se procesaron {len(admitidos_list)} estudiantes exitosamente. Resultados publicados."}
-        
+
+    except HTTPException:
+        # No convertir un 400 (archivo inválido) en 500: el detalle ya es claro.
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -229,37 +237,25 @@ async def get_admitidos(db: AsyncSession = Depends(get_db)):
     
     # Formateamos para el core
     formatted = []
-    
-    # Mapping simplificado para el programa_id temporal (el core deberia mapear, pero para MVP enviamos un fallback id)
-    # Mapeo exacto alineado con los IDs del frontend (1=Arquitectura/Sistemas, 2=Enfermeria, 4=Administracion, 5=Contabilidad, 6=Mecatronica)
-    program_mapping = {
-        "DESARROLLO DE SISTEMAS DE INFORMACIÓN": 1,
-        "ENFERMERÍA TÉCNICA": 2,
-        "GESTIÓN ADMINISTRATIVA": 4,
-        "ASISTENCIA ADMINISTRATIVA": 4,
-        "CONTABILIDAD": 5,
-        "MECATRÓNICA AUTOMOTRIZ": 6,
-        "ELECTRICIDAD INDUSTRIAL": 7,
-        "ADMINISTRACIÓN DE OPERACIONES TURÍSTICAS": 8,
-        "CONSTRUCCIÓN CIVIL": 9,
-        "PRODUCCIÓN AGROPECUARIA": 10,
-        "MANEJO FORESTAL": 11
-    }
-    
+
+    # El programa_id se resuelve contra el catalogo REAL (programas_estudio) de
+    # esta BD: los IDs cambian entre entornos, asi que nunca se usan ids fijos
+    # (con un mapa hardcodeado los ingresantes se asociaban a programas que no
+    # existian y la ingesta fallaba con "El programa de estudios X no existe").
+    catalogo_rows = await db.execute(text("SELECT id, nombre FROM programas_estudio"))
+    catalogo = [(row["id"], row["nombre"]) for row in catalogo_rows.mappings()]
+
     for r in records:
-        prog_name_upper = r.programa_nombre.upper()
-        # Fallback a 99 (Desconocido) en lugar de 1, para no mezclar con Sistemas
-        prog_id = 99
-        for k,v in program_mapping.items():
-            if k in prog_name_upper or prog_name_upper in k:
-                prog_id = v
-                break
-                
+        # (None, None) si la carrera del Excel no esta en el catalogo: el core
+        # responde con un mensaje claro en vez de un id inexistente.
+        prog_id, _prog_catalogo = resolver_programa(r.programa_nombre, catalogo)
+
         formatted.append({
             "dni": r.dni,
             "nombres": r.nombres,
             "apellidos": r.apellidos,
-            "programa_id": prog_id, 
+            "programa_id": prog_id,
+            "programa_nombre": r.programa_nombre,
             "celular": r.celular,
             "email_personal": r.email,
             "fecha_nacimiento": r.fecha_nacimiento,

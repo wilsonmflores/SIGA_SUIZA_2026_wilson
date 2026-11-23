@@ -1009,11 +1009,28 @@ export function StudentMaster() {
 
       if (resIngesta.ok) {
         const result = await resIngesta.json();
-        toast.success(`Sincronización exitosa. ${result.estudiantes_creados} nuevos estudiantes ingresados al Core.`);
+        const pendientes = Object.keys(result.carreras_pendientes || {});
+        if (result.omitidos > 0) {
+          toast.warning(
+            `${result.estudiantes_creados} estudiantes ingresados y ${result.omitidos} omitidos. ` +
+            `Carreras del archivo que aún no están en el catálogo: ${pendientes.join(', ')}. ` +
+            'Créalas en Gestión Académica Central y vuelva a sincronizar para completarlos.'
+          );
+        } else {
+          toast.success(`Sincronización exitosa. ${result.estudiantes_creados} nuevos estudiantes ingresados al Core.`);
+        }
         handleSearch(searchTerm, { immediate: true });
       } else {
-        const err = await resIngesta.text();
-        toast.error(`Error en la ingesta: ${err}`);
+        const errorText = await resIngesta.text();
+        let detalle = errorText;
+        try {
+          const cuerpo = JSON.parse(errorText);
+          if (typeof cuerpo.detail === 'string') detalle = cuerpo.detail;
+          else if (cuerpo.detail) detalle = JSON.stringify(cuerpo.detail);
+        } catch {
+          // La respuesta no es JSON (p. ej. HTML del proxy): se muestra tal cual.
+        }
+        toast.error(`Error en la ingesta: ${detalle}`);
       }
     } catch (e) {
       console.error(e);

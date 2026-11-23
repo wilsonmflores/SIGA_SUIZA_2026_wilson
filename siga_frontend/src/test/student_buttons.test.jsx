@@ -40,7 +40,7 @@ describe('Botones del Registro de Estudiantes (Ver / Editar / Sincronizar)', () 
   const originalFetch = globalThis.fetch;
   let calls = [];
 
-  const installFetch = ({ admitidos = [] } = {}) => {
+  const installFetch = ({ admitidos = [], ingestaError = null, ingestaResult = null } = {}) => {
     calls = [];
     globalThis.fetch = vi.fn().mockImplementation((url, opts = {}) => {
       const u = String(url);
@@ -51,7 +51,18 @@ describe('Botones del Registro de Estudiantes (Ver / Editar / Sincronizar)', () 
         return jsonRes({ ...student, apellidos: 'Pérez Editado' });
       }
       if (method === 'POST' && u.includes('/admision/ingesta')) {
-        return jsonRes({ message: 'Ingesta procesada', estudiantes_creados: 0 });
+        if (ingestaError) {
+          // Respuesta de error real: trae `text()` (como el fetch auténtico)
+          return Promise.resolve({
+            ok: false,
+            status: ingestaError.status,
+            headers: new Headers(),
+            json: async () => JSON.parse(ingestaError.body),
+            text: async () => ingestaError.body,
+          });
+        }
+        if (ingestaResult) return jsonRes(ingestaResult);
+        return jsonRes({ message: 'Ingesta procesada', estudiantes_creados: 0, omitidos: 0, carreras_pendientes: {} });
       }
       if (u.includes('/mod-admision/admitidos')) return jsonRes({ admitidos });
       if (u.includes('/estudiantes/101')) return jsonRes(student); // detalle de la ficha
@@ -149,5 +160,63 @@ describe('Botones del Registro de Estudiantes (Ver / Editar / Sincronizar)', () 
     expect(screen.getByTitle('Ver Ficha Institucional y Expediente')).toBeInTheDocument();
     expect(screen.getByTitle('Corregir Datos del Estudiante')).toBeInTheDocument();
     expect(screen.getByTitle('Eliminar estudiante del registro')).toBeInTheDocument();
+  });
+
+  it('5. Un error 422 de la ingesta muestra el detalle legible (no el JSON crudo)', async () => {
+    const detalle =
+      'Carreras del archivo de admisión que no existen en el catálogo: MANEJO FORESTAL. ' +
+      'Créalas en Gestión Académica Central y vuelva a sincronizar.';
+    installFetch({
+      admitidos: [
+        { dni: '12345678', nombres: 'Ana', apellidos: 'Torres', programa_id: null, programa_nombre: 'MANEJO FORESTAL' },
+      ],
+      ingestaError: { status: 422, body: JSON.stringify({ detail: detalle }) },
+    });
+    renderApp();
+
+    await screen.findByText('Carlos Pérez Gómez');
+
+    fireEvent.click(screen.getByRole('button', { name: /Sincronizar desde Admisión/i }));
+    await screen.findByTestId('confirm-modal');
+    fireEvent.click(screen.getByTestId('confirm-modal-ok'));
+
+    await waitFor(() =>
+      expect(calls.some(c => c.method === 'POST' && c.u.includes('/admision/ingesta'))).toBe(true)
+    );
+
+    await screen.findByTestId('toast-error');
+    expect(screen.getByText(new RegExp(detalle.slice(0, 60)))).toBeInTheDocument();
+    // Nunca debe verse el JSON tal cual como lo devolvió el backend
+    expect(screen.queryByText(/\{"detail"/)).not.toBeInTheDocument();
+  });
+
+  it('6. La ingesta parcial avisa cuántos entraron y qué carreras faltan', async () => {
+    installFetch({
+      admitidos: [
+        { dni: '12345678', nombres: 'Ana', apellidos: 'Torres', programa_id: 1, programa_nombre: 'Gestión Administrativa' },
+      ],
+      ingestaResult: {
+        message: 'Ingesta parcial: 74 ingresados y 707 omitidos por carreras que aún no están en el catálogo.',
+        estudiantes_creados: 74,
+        omitidos: 707,
+        carreras_pendientes: { 'ENFERMERÍA TÉCNICA': 258, 'CONTABILIDAD': 79 },
+      },
+    });
+    renderApp();
+
+    await screen.findByText('Carlos Pérez Gómez');
+
+    fireEvent.click(screen.getByRole('button', { name: /Sincronizar desde Admisión/i }));
+    await screen.findByTestId('confirm-modal');
+    fireEvent.click(screen.getByTestId('confirm-modal-ok'));
+
+    await waitFor(() =>
+      expect(calls.some(c => c.method === 'POST' && c.u.includes('/admision/ingesta'))).toBe(true)
+    );
+
+    await screen.findByTestId('toast-warning');
+    expect(screen.getByText(/74 estudiantes ingresados y 707 omitidos/)).toBeInTheDocument();
+    expect(screen.getByText(/ENFERMERÍA TÉCNICA/)).toBeInTheDocument();
+    expect(screen.getByText(/vuelva a sincronizar/i)).toBeInTheDocument();
   });
 });

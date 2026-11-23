@@ -117,12 +117,25 @@ async def ingesta_admitidos(request: Request, data: IngestaMasivaRequest, db: As
     Crea los expedientes de estudiantes y dispara eventos para integrarlos al ecosistema (crear usuarios, matricular, etc).
     """
     estudiantes_creados = 0
+    omitidos = 0
+    carreras_pendientes: dict = {}
 
-    # Validar todo el lote antes de insertar para evitar ingresos parciales.
+    # Validar antes de insertar los programas que sí están en el catálogo
+    # (evita ingresos parciales si hay un id inválido o una carrera inactiva).
     for admitido in data.admitidos:
-        await validar_programa_activo(db, admitido.programa_id)
-    
+        if admitido.programa_id is not None:
+            await validar_programa_activo(db, admitido.programa_id)
+
     for admitido in data.admitidos:
+        # Carrera del Excel que aún no existe en el catálogo: se omite y se
+        # reporta por nombre; al crearla y volver a sincronizar entra en la
+        # siguiente pasada (la ingesta es reanudable, sin pérdida de datos).
+        if admitido.programa_id is None:
+            clave = (admitido.programa_nombre or "").strip() or "(sin nombre)"
+            carreras_pendientes[clave] = carreras_pendientes.get(clave, 0) + 1
+            omitidos += 1
+            continue
+
         # 1. Capa Anticorrupción: Validar si ya existe
         existing = await db.execute(select(Estudiante).where(Estudiante.dni == admitido.dni))
         if existing.scalar_one_or_none():
@@ -171,7 +184,19 @@ async def ingesta_admitidos(request: Request, data: IngestaMasivaRequest, db: As
         estudiantes_creados += 1
         
     await db.commit()
-    return {"message": "Ingesta procesada", "estudiantes_creados": estudiantes_creados}
+
+    mensaje = "Ingesta procesada"
+    if omitidos:
+        mensaje = (
+            f"Ingesta parcial: {estudiantes_creados} ingresados y {omitidos} omitidos "
+            "por carreras que aún no están en el catálogo."
+        )
+    return {
+        "message": mensaje,
+        "estudiantes_creados": estudiantes_creados,
+        "omitidos": omitidos,
+        "carreras_pendientes": carreras_pendientes,
+    }
 
 @router.post("/estudiantes/", response_model=EstudianteResponse, status_code=status.HTTP_201_CREATED)
 async def crear_estudiante(request: Request, data: EstudianteCreate, db: AsyncSession = Depends(get_db)):

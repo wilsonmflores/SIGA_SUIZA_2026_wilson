@@ -87,7 +87,10 @@ class IngestaAdmitido(BaseModel):
     dni: str
     nombres: str
     apellidos: str
-    programa_id: int
+    # None cuando la carrera del Excel no existía en el catálogo: se informa
+    # junto con `programa_nombre` en la validación de la ingesta.
+    programa_id: Optional[int] = None
+    programa_nombre: Optional[str] = None
     periodo_id: Optional[int] = 1
     celular: Optional[str] = None
     email_personal: Optional[str] = None
