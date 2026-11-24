@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../../core/api/client';
 import { useToast } from '../../core/ui/ToastContext';
+import { useRefreshOnFocus } from '../../core/ui/useRefreshOnFocus';
 import { Plus, Pencil, X, UserX, Users, ShieldCheck } from 'lucide-react';
 
 export function UserManagement() {
@@ -23,8 +24,8 @@ export function UserManagement() {
     loadData();
   }, []);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async ({ silencioso = false } = {}) => {
+    if (!silencioso) setLoading(true);
     try {
       const [usersRes, rolesRes] = await Promise.all([
         apiClient.request('/api/mod-usuarios/usuarios'),
@@ -35,9 +36,13 @@ export function UserManagement() {
     } catch (error) {
       console.error('Error loading users/roles:', error);
     } finally {
-      setLoading(false);
+      if (!silencioso) setLoading(false);
     }
   };
+
+  // Al volver a la ventana: refresca usuarios/roles creados en otra PC o
+  // pestaña sin recargar la página (F5). Refresco silencioso (sin spinner).
+  useRefreshOnFocus(() => loadData({ silencioso: true }));
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;

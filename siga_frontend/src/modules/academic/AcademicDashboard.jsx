@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { apiClient } from '../../core/api/client';
 import { invalidarProgramas } from '../../core/api/programasStore';
 import { useToast } from '../../core/ui/ToastContext';
+import { useRefreshOnFocus } from '../../core/ui/useRefreshOnFocus';
 import { CurriculumMesh } from './CurriculumMesh';
 import { PeriodManager } from './PeriodManager';
 import { CareerCarousel } from './CareerCarousel';
@@ -118,8 +119,8 @@ export function AcademicDashboard() {
     coordinador_nombre: ''
   });
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async ({ silencioso = false } = {}) => {
+    if (!silencioso) setLoading(true);
     try {
       const [programsData, periodsData] = await Promise.all([
         apiClient.callModule('mod-programas-estudio', 'programas'),
@@ -131,9 +132,13 @@ export function AcademicDashboard() {
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
-      setLoading(false);
+      if (!silencioso) setLoading(false);
     }
   };
+
+  // Al volver a la ventana: carreras/periodos creados en otra PC o pestaña
+  // aparecen sin recargar la página (F5). Refresco silencioso (sin spinner).
+  useRefreshOnFocus(() => fetchData({ silencioso: true }));
 
   useEffect(() => {
     fetchData();

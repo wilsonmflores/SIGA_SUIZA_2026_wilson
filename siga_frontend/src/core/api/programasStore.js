@@ -58,8 +58,14 @@ const sincronizarCareersMap = (lista) => {
 };
 
 let cache = null;            // Array<{id,label,estado}> | null (null = sin cargar)
+let cacheEnMillis = 0;       // instante de la ultima carga valida (TTL)
 let cargaEnCurso = null;     // promesa deduplicada
 const suscriptores = new Set();
+
+// La cache no dura toda la sesion: si tiene mas de TTL_MS se vuelve a pedir al
+// volver a usarla. Asi, aunque nadie llame a invalidarProgramas() (p. ej. una
+// carrera creada desde OTRA PC), el catalogo se actualiza solo.
+const TTL_MS = 30_000;
 
 const notificar = () => {
   suscriptores.forEach(callback => callback(cache ?? []));
@@ -67,6 +73,7 @@ const notificar = () => {
 
 const aplicar = (lista) => {
   cache = lista;
+  cacheEnMillis = Date.now();
   sincronizarCareersMap(lista);
   notificar();
 };
@@ -86,7 +93,8 @@ const leerToken = () => {
  * @returns {Promise<Array>} lista de programas normalizada
  */
 export const cargarProgramas = async ({ fuerza = false } = {}) => {
-  if (!fuerza && cache) return cache;
+  const vigente = cache !== null && Date.now() - cacheEnMillis < TTL_MS;
+  if (!fuerza && vigente) return cache;
   if (cargaEnCurso) return cargaEnCurso;
 
   cargaEnCurso = (async () => {
@@ -171,4 +179,25 @@ export function useProgramas() {
     cargando,
     recargar: () => cargarProgramas({ fuerza: true }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Actualizacion sin F5 (multi-PC / multi-pestana): cuando el usuario vuelve a
+// la ventana, el catalogo se revalida. Si otra PC creo, edito o elimino una
+// carrera, aparece en todos los formularios sin recargar la pagina.
+// ---------------------------------------------------------------------------
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  let ultimoIntento = 0;
+  const revalidar = () => {
+    if (cache === null) return; // nada cargado todavia: no hay nada que refrescar
+    const ahora = Date.now();
+    if (ahora - ultimoIntento < 10_000) return; // evita ráfagas al cambiar de ventana
+    ultimoIntento = ahora;
+    cargarProgramas(); // sin fuerza: el TTL decide si vuelve a pedir
+  };
+  const alVolver = () => {
+    if (document.visibilityState === 'visible') revalidar();
+  };
+  window.addEventListener('focus', alVolver);
+  document.addEventListener('visibilitychange', alVolver);
 }

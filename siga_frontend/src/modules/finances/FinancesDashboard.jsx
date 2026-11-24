@@ -46,6 +46,7 @@ import { exportLibroDiarioXlsx } from './lib/libroDiarioExport';
 import { getReceiptVerificationCode } from './lib/paymentUtils';
 import { tesoreriaApi, migrateLocalDataOnce } from './lib/tesoreriaApi';
 import { StudentPaymentsModal } from './StudentPaymentsModal';
+import { useRefreshOnFocus } from '../../core/ui/useRefreshOnFocus';
 
 // Normaliza texto para búsquedas insensibles a mayúsculas, minúsculas y tildes
 const normalizarTexto = (texto) =>
@@ -117,8 +118,8 @@ export function FinancesDashboard() {
   };
 
   // Fetch de Estudiantes desde la API
-  const fetchStudents = async () => {
-    setLoading(true);
+  const fetchStudents = async ({ silencioso = false } = {}) => {
+    if (!silencioso) setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/mod-gestion-academica/estudiantes/`, {
@@ -139,9 +140,18 @@ export function FinancesDashboard() {
       console.error('Error al obtener estudiantes:', e);
       setStudents([]);
     } finally {
-      setLoading(false);
+      if (!silencioso) setLoading(false);
     }
   };
+
+  // La caja queda abierta todo el día: al volver a la ventana se refrescan
+  // pagos, tarifario y estudiantes (creados/cobrados en otra PC o pestaña)
+  // sin recargar la página (F5). Refresco silencioso (sin spinner).
+  useRefreshOnFocus(() => {
+    reloadCatalog();
+    fetchTransactions();
+    fetchStudents({ silencioso: true });
+  });
 
   useEffect(() => {
     (async () => {

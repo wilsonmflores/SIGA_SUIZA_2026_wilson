@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../../core/api/client';
 import { useToast } from '../../core/ui/ToastContext';
+import { useRefreshOnFocus } from '../../core/ui/useRefreshOnFocus';
 import { Plus, Pencil, X, UserCog } from 'lucide-react';
 
 export function StaffManagement() {
@@ -23,8 +24,8 @@ export function StaffManagement() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchStaff = async () => {
-    setLoading(true);
+  const fetchStaff = async ({ silencioso = false } = {}) => {
+    if (!silencioso) setLoading(true);
     try {
       const data = await apiClient.request('/api/mod-usuarios/personal');
       setStaffList(Array.isArray(data) ? data : []);
@@ -35,9 +36,13 @@ export function StaffManagement() {
     } catch (error) {
       console.error('Error fetching staff:', error);
     } finally {
-      setLoading(false);
+      if (!silencioso) setLoading(false);
     }
   };
+
+  // Al volver a la ventana: muestra personal/carreras registrados en otra PC o
+  // pestaña sin recargar la página (F5). Refresco silencioso (sin spinner).
+  useRefreshOnFocus(() => fetchStaff({ silencioso: true }));
 
   useEffect(() => {
     fetchStaff();
