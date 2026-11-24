@@ -20,9 +20,15 @@ class HealthStatus(str, Enum):
     UNHEALTHY = "unhealthy"
     OFFLINE = "offline"
 
+# Fallos consecutivos requeridos antes de marcar UNHEALTHY/OFFLINE. Es lo que
+# activa el fallback del gateway (respuestas cacheadas / 503), asi que un unico
+# fallo aislado (p. ej. un timeout de 10s) NO debe interceptar subidas ni
+# entregar datos viejos: se necesitan N fallos seguidos (N * 30s de monitoreo).
+UMBRAL_FALLOS_CONSECUTIVOS = 3
+
 class ModuleHealth:
     """Estado de salud de un módulo"""
-    
+
     def __init__(self, module_name: str):
         self.module_name = module_name
         self.status = HealthStatus.HEALTHY
@@ -31,6 +37,7 @@ class ModuleHealth:
         self.error_count = 0
         self.last_error = None
         self.degraded_since = None
+        self.fallos_consecutivos = 0
         
     def update(self, status: HealthStatus, response_time: float = None, error: str = None):
         """Actualiza estado de salud"""
@@ -47,6 +54,33 @@ class ModuleHealth:
             self.error_count = 0
             self.last_error = None
             self.degraded_since = None
+
+    def registrar_fallo(self, status: HealthStatus, response_time: float = None, error: str = None):
+        """Registra un fallo de health check con tolerancia a fallos aislados.
+
+        Solo tras UMBRAL_FALLOS_CONSECUTIVOS fallos seguidos degrada el estado
+        (UNHEALTHY/OFFLINE), que es lo que dispara el fallback del gateway.
+        """
+        self.fallos_consecutivos += 1
+        ya_degradado = self.status in (HealthStatus.UNHEALTHY, HealthStatus.OFFLINE)
+        if self.fallos_consecutivos < UMBRAL_FALLOS_CONSECUTIVOS and not ya_degradado:
+            # Fallo aislado tolerado: se registra el error pero el modulo sigue
+            # enroutando normalmente (el proxy devolvera el error real si esta caido).
+            self.error_count += 1
+            self.last_error = error
+            self.last_check = datetime.now()
+            self.response_time = response_time
+            logger.warning(
+                "⚠️  %s falló (%s/%s): %s — aún no se activa el fallback",
+                self.module_name, self.fallos_consecutivos,
+                UMBRAL_FALLOS_CONSECUTIVOS, error,
+            )
+            return
+        self.update(status, response_time, error)
+
+    def registrar_exito(self, response_time: float = None):
+        """Reinicia el contador de fallos tras un health check exitoso (HTTP 200)."""
+        self.fallos_consecutivos = 0
 
 class HealthMonitor:
     """Monitor de salud avanzado para módulos"""
@@ -118,6 +152,7 @@ class HealthMonitor:
                 
                 if response.status_code == 200:
                     health_data = response.json()
+                    health.registrar_exito(response_time)
                     
                     if health_data.get('status') == 'healthy':
                         health.update(HealthStatus.HEALTHY, response_time)
@@ -127,22 +162,22 @@ class HealthMonitor:
                                     health_data.get('message', 'Status no healthy'))
                         logger.warning(f"⚠️  {module_name} degradado")
                 else:
-                    health.update(HealthStatus.UNHEALTHY, response_time, 
+                    health.registrar_fallo(HealthStatus.UNHEALTHY, response_time, 
                                 f"HTTP {response.status_code}")
                     logger.warning(f"🔶 {module_name} no saludable: {response.status_code}")
         
         except httpx.TimeoutException:
             response_time = (datetime.now() - start_time).total_seconds()
-            health.update(HealthStatus.UNHEALTHY, response_time, "Timeout")
+            health.registrar_fallo(HealthStatus.UNHEALTHY, response_time, "Timeout")
             logger.warning(f"⏰ {module_name} timeout")
             
         except httpx.ConnectError:
-            health.update(HealthStatus.OFFLINE, None, "Connection error")
+            health.registrar_fallo(HealthStatus.OFFLINE, None, "Connection error")
             logger.error(f"🔌 {module_name} offline - Error de conexión")
             
         except Exception as e:
             response_time = (datetime.now() - start_time).total_seconds()
-            health.update(HealthStatus.UNHEALTHY, response_time, str(e))
+            health.registrar_fallo(HealthStatus.UNHEALTHY, response_time, str(e))
             logger.error(f"❌ Error health check {module_name}: {e}")
         
         # Emitir evento si el estado cambió

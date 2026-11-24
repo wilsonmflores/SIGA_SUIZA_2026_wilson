@@ -43,7 +43,9 @@ app.add_middleware(
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "module": "mod-admision"}
+    # El health_monitor del Core exige literalmente "healthy" (no "ok"):
+    # con "ok" el modulo quedaba marcado permanentemente como DEGRADED.
+    return {"status": "healthy", "module": "mod-admision"}
 
 @app.get("/")
 async def root():

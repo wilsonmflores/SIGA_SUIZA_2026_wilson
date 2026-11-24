@@ -154,6 +154,13 @@ class HTTPGateway:
         """Verifica y aplica fallback de resiliencia si es necesario"""
         if not self.resilience_enabled or not health_monitor:
             return None
+
+        # Solo las LECTURAS usan fallback. Una escritura (POST/PUT/PATCH/DELETE)
+        # se envia al modulo y devuelve su resultado real: si el modulo esta
+        # caido el cliente recibe 502/504 (error claro) y no un 200 fingido
+        # con datos cacheados que haria creer que se guardo/borro algo.
+        if request.method.upper() != "GET":
+            return None
         
         # Verificar salud del módulo
         health = health_monitor.get_module_health(module_name)
@@ -173,7 +180,8 @@ class HTTPGateway:
             fallback_result = await fallback_manager.handle_module_request(
                 module_name, 
                 path, 
-                request_data
+                request_data,
+                method=request.method,
             )
             
             return self._create_fallback_response(fallback_result)
@@ -225,6 +233,12 @@ class HTTPGateway:
         """Ejecuta fallback después de un error en tiempo real"""
         if not self.resilience_enabled or not fallback_manager:
             return None
+
+        # Escrituras: jamas responder con fallback. Si la escritura fallo, el
+        # cliente debe recibir el error real (502/503/504) y no un 200 con la
+        # ultima lectura cacheada, que haria creer que el cambio se aplico.
+        if request.method.upper() != "GET":
+            return None
             
         logger.info(f"🔄 Ejecutando fallback para {module_name} después de {error_type}")
         
@@ -240,7 +254,8 @@ class HTTPGateway:
         fallback_result = await fallback_manager.handle_module_request(
             module_name, 
             path, 
-            request_data
+            request_data,
+            method=request.method,
         )
         
         return self._create_fallback_response(fallback_result)

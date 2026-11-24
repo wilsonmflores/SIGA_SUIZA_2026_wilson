@@ -55,6 +55,23 @@ class UserRepository:
         await self.db.refresh(user)
         return user
     
+    # Permisos base de SOLO LECTURA para roles sin permisos explicitos.
+    # El PermissionSeeder solo cubre los 8 roles fijos; cualquier rol creado
+    # despues (p. ej. "director" en seed_users.py, o roles dados de alta desde
+    # Personal/Usuarios) quedaba con UNICAMENTE "core:access" y recibia 403 en
+    # TODAS las rutas /api/<modulo>/... (ni siquiera podia listar datos).
+    # Con esta base la interfaz funciona para lectura; las escrituras exigen un
+    # rol con permisos explicitos (seeder) o ser superusuario.
+    PERMISOS_BASE_SOLO_LECTURA = [
+        "mod-planes-estudio:read",
+        "mod-programas-estudio:read",
+        "mod-gestion-academica:read",
+        "mod-evaluacion:read",
+        "mod-admision:read",
+        # Se excluyen mod-usuarios:read y mod-auditoria:read a proposito
+        # (listado de usuarios y bitacora: datos sensibles).
+    ]
+
     async def get_user_permissions(self, user_id: int) -> List[str]:
         """Obtiene permisos del usuario desde la base de datos"""
         result = await self.db.execute(
@@ -82,6 +99,10 @@ class UserRepository:
                     "mod-evaluacion:read",
                     "mod-evaluacion:write",
                 ])
+            if not role.permissions and rname not in ("superadmin", "docente"):
+                # Rol dinamico sin permisos sembrados -> base de solo lectura
+                # en vez de 403 masivo en todos los catalogos.
+                permissions.update(self.PERMISOS_BASE_SOLO_LECTURA)
             for perm in role.permissions:
                 permissions.add(perm.name)
         

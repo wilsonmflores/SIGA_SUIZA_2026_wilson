@@ -73,9 +73,15 @@ class FallbackManager:
     async def handle_module_request(self, 
                                   module_name: str, 
                                   endpoint: str,
-                                  request_data: Dict = None) -> Dict[str, Any]:
+                                  request_data: Dict = None,
+                                  method: str = "GET") -> Dict[str, Any]:
         """
-        Maneja solicitudes a módulos con fallback automático
+        Maneja solicitudes a módulos con fallback automático.
+
+        ``method`` importa: las escrituras (POST/PUT/PATCH/DELETE) JAMÁS se
+        responden con caché. Antes la clave no incluía el método, así que un
+        POST al mismo path que un GET cacheado devolvía 200 con datos viejos y
+        el cliente creía que había guardado cuando no se escribió nada.
         """
         # 1. Verificar si hay un handler personalizado
         if module_name in self.fallback_handlers:
@@ -86,20 +92,22 @@ class FallbackManager:
             except Exception as e:
                 logger.error(f"❌ Error en handler de fallback para {module_name}: {e}")
 
-        # 2. Intentar obtener datos del cache primero
-        cache_key = self._build_cache_key(module_name, endpoint)
-        cached_data = await cache_manager.get(cache_key)
+        # 2. Cache solo para LECTURAS: una escritura no puede fingir éxito.
+        if str(method).upper() == "GET":
+            cache_key = self._build_cache_key(module_name, endpoint, method)
+            cached_data = await cache_manager.get(cache_key)
+
+            if cached_data is not None:
+                logger.info(f"📦 Fallback exitoso: Cache para {module_name}/{endpoint}")
+                return {
+                    "status": "cached",
+                    "data": cached_data,
+                    "message": "Datos cacheados (módulo offline)",
+                    "timestamp": asyncio.get_event_loop().time()
+                }
         
-        if cached_data is not None:
-            logger.info(f"📦 Fallback exitoso: Cache para {module_name}/{endpoint}")
-            return {
-                "status": "cached",
-                "data": cached_data,
-                "message": "Datos cacheados (módulo offline)",
-                "timestamp": asyncio.get_event_loop().time()
-            }
-        
-        # 3. Usar datos estáticos como último recurso
+        # 3. Usar datos estáticos como último recurso (responde 503: el cliente
+        #    debe enterarse de que la operación NO se ejecutó).
         static_fallback = self.get_static_fallback(module_name, endpoint)
         if static_fallback:
             logger.warning(f"🔄 Fallback degradado (sin datos) para {module_name}/{endpoint}")
@@ -120,11 +128,16 @@ class FallbackManager:
             "timestamp": asyncio.get_event_loop().time()
         }
     
-    def _build_cache_key(self, module_name: str, endpoint: str) -> str:
-        """Construye clave de cache para un endpoint específico"""
+    def _build_cache_key(self, module_name: str, endpoint: str, method: str = "GET") -> str:
+        """Construye clave de cache para un endpoint específico.
+
+        Incluye el método HTTP: GET y POST al mismo path son claves distintas
+        (solo los GET se cachean, pero la clave debe reflejarlo para que una
+        escritura jamás lea la lectura cacheada).
+        """
         # Normalizar endpoint (remover parámetros de query, etc.)
         clean_endpoint = endpoint.split('?')[0].replace('/', '_')
-        return f"{module_name}:{clean_endpoint}"
+        return f"{module_name}:{str(method).upper()}:{clean_endpoint}"
     
     def get_static_fallback(self, module_name: str, endpoint: str) -> Optional[Dict]:
         """Obtiene fallback estático para un endpoint específico"""
@@ -160,9 +173,9 @@ class FallbackManager:
         self.fallback_handlers[module_name] = handler
         logger.info(f"✅ Handler de fallback registrado para {module_name}")
     
-    async def cache_successful_response(self, module_name: str, endpoint: str, data: Any):
-        """Cachea respuestas exitosas para usar como fallback futuro"""
-        cache_key = self._build_cache_key(module_name, endpoint)
+    async def cache_successful_response(self, module_name: str, endpoint: str, data: Any, method: str = "GET"):
+        """Cachea respuestas exitosas para usar como fallback futuro (solo GET)."""
+        cache_key = self._build_cache_key(module_name, endpoint, method)
         success = await cache_manager.set(cache_key, data, ttl=600)  # 10 minutos
         
         if success:

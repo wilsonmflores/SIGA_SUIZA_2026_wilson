@@ -548,7 +548,7 @@ function ProgramaFilter({ value, onChange }) {
 }
 
 export function StudentMaster() {
-  const { user } = useAuth();
+  const { user, permissions = [] } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   // Catalogo de carreras en vivo (se invalida desde Gestion Academica).
@@ -563,6 +563,19 @@ export function StudentMaster() {
     userRoles.includes('admin') ||
     userRole === 'superadmin' ||
     userRole === 'admin'
+  );
+  // La ingesta de Admision requiere en el gateway: mod-admision:read (GET /admitidos)
+  // + mod-gestion-academica:write (POST /admision/ingesta). Se valida por PERMISOS
+  // (fuente real del backend) y no solo por nombre de rol: el rol disenado para
+  // esto es `admin_admision`, que antes quedaba bloqueado porque el gate solo
+  // aceptaba 'superadmin'/'admin' (rol 'admin' ni siquiera existe en el seeder).
+  const puedeIngestarAdmision = Boolean(
+    user?.is_superuser ||
+    userRoles.includes('superadmin') ||
+    userRoles.includes('admin') ||
+    userRoles.includes('admin_admision') ||
+    (permissions.includes('mod-admision:read') &&
+      permissions.includes('mod-gestion-academica:write'))
   );
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -970,8 +983,8 @@ export function StudentMaster() {
   };
 
   const handleSincronizar = async () => {
-    if (userRole !== 'superadmin' && userRole !== 'admin') {
-      toast.error("Solo el Super Admin puede ejecutar la ingesta de Admisión.");
+    if (!puedeIngestarAdmision) {
+      toast.error("No tienes permisos para la ingesta de Admisión. Se requiere Super Admin, Administrador, el rol de Admisión (admin_admision) o los permisos mod-admision:read + mod-gestion-academica:write.");
       return;
     }
 

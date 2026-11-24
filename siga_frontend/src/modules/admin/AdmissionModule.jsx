@@ -31,12 +31,18 @@ export function AdmissionModule() {
         body: formData
       });
       
-      const data = await res.json();
+      // La respuesta puede no ser JSON (p. ej. el index.html que devuelve el
+      // rewrite de SPA si API_BASE apunta mal): no se debe romper el flujo.
+      const data = await res.json().catch(() => ({}));
       
       if (res.ok) {
         setMessage({ text: data.message || 'Archivo procesado con éxito.', type: 'success' });
       } else {
-        setMessage({ text: data.detail || 'Error al procesar el archivo.', type: 'error' });
+        const detalle = data.detail || (typeof data.message === 'string' ? data.message : '');
+        setMessage({
+          text: detalle || `El servidor respondió HTTP ${res.status} sin detalle.`,
+          type: 'error'
+        });
       }
     } catch (err) {
       console.error(err);
