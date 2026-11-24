@@ -337,19 +337,40 @@ export function EvaluationDashboard() {
         }
       });
 
-      const results = await Promise.all(promises);
+      // allSettled: si una falla, las demás se registran igual y el reintento solo
+      // reenvía las fallidas (con Promise.all un fallo borraba el registro_id de las
+      // ya guardadas en el estado local y el reenvío duplicaba la nota).
+      const results = await Promise.allSettled(promises);
 
       const newStudents = [...students];
+      let guardadas = 0;
+      const fallidas = [];
       for (let i = 0; i < results.length; i++) {
         const res = results[i];
-        if (res.status === 'ok' && !newStudents[i].registro_id) {
-          newStudents[i].registro_id = res.data.id;
+        if (res.status === 'fulfilled') {
+          guardadas++;
+          if (res.value?.status === 'ok' && !newStudents[i].registro_id) {
+            newStudents[i].registro_id = res.value.data?.id;
+          }
+        } else {
+          fallidas.push(res.reason);
         }
       }
 
       setStudents(newStudents);
-      setSaveSuccess('Calificaciones guardadas exitosamente');
-      toast.success("¡Calificaciones guardadas exitosamente en el sistema SIGA!");
+      if (fallidas.length === 0) {
+        setSaveSuccess('Calificaciones guardadas exitosamente');
+        toast.success("¡Calificaciones guardadas exitosamente en el sistema SIGA!");
+      } else {
+        // mapSaveError extrae el detail del backend (p. ej. "acta cerrada").
+        const detalle = mapSaveError(fallidas[0]);
+        const msg = guardadas > 0
+          ? `Se guardaron ${guardadas} de ${results.length} calificaciones; ${fallidas.length} fallaron: ${detalle}. Reintente para completar las pendientes.`
+          : detalle;
+        setSaveError(msg);
+        setSaveSuccess(null);
+        toast.warning(msg);
+      }
     } catch (e) {
       console.error('Error saving grades', e);
       setSaveError(mapSaveError(e));

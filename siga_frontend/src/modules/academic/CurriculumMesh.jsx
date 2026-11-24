@@ -153,13 +153,13 @@ export function CurriculumMesh({ programId, onBack }) {
     try {
       await apiClient.request(`/api/mod-programas-estudio/modulos/${showAddUnit.moduloId}/unidades`, {
         method: 'POST',
-        data: {
+        body: JSON.stringify({
           nombre: newUnit.nombre,
           creditos: parseInt(newUnit.creditos) || 0,
           horas_teoria: parseInt(newUnit.horas_teoria) || 0,
           horas_practica: parseInt(newUnit.horas_practica) || 0,
           orden: parseInt(newUnit.orden) || 1
-        }
+        })
       });
       setShowAddUnit({ show: false, moduloId: null, moduloNombre: '' });
       toast.success('Unidad didáctica guardada exitosamente');
