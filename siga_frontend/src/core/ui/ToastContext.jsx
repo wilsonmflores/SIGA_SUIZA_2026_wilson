@@ -61,7 +61,7 @@ function ToastItem({ toast, onClose }) {
       <span data-testid={config.testid} className="inline-flex items-center">
         {config.icon}
       </span>
-      <div className="flex-1 text-sm font-medium leading-relaxed break-words">
+      <div className="flex-1 text-sm font-medium leading-relaxed break-words whitespace-pre-line">
         {message}
       </div>
       <button

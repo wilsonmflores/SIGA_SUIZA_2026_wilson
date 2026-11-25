@@ -841,8 +841,9 @@ export function StudentMaster() {
 
     const token = localStorage.getItem('token');
     if (!token) {
-      alert('Tu sesión expiró. Vuelve a iniciar sesión para registrar al estudiante.');
-      window.location.reload();
+      toast.error('Tu sesión expiró. Vuelve a iniciar sesión para registrar al estudiante.');
+      // Recarga diferida para que el usuario alcance a leer el toast.
+      setTimeout(() => window.location.reload(), 2500);
       return;
     }
 
@@ -953,8 +954,9 @@ export function StudentMaster() {
 
       if (res.status === 401) {
         localStorage.removeItem('token');
-        alert('Tu sesión expiró. Vuelve a iniciar sesión para registrar al estudiante.');
-        window.location.reload();
+        toast.error('Tu sesión expiró. Vuelve a iniciar sesión para registrar al estudiante.');
+        // Recarga diferida para que el usuario alcance a leer el toast.
+        setTimeout(() => window.location.reload(), 2500);
         return;
       }
 
@@ -973,10 +975,10 @@ export function StudentMaster() {
       } catch {
         if (errorText) mensaje = errorText;
       }
-      alert(`No se pudo registrar al estudiante.\n\n${mensaje}`);
+      toast.error(`No se pudo registrar al estudiante.\n\n${mensaje}`);
     } catch (e) {
       console.error(e);
-      alert("Error de conexión al registrar el estudiante.");
+      toast.error("Error de conexión al registrar el estudiante.");
     } finally {
       setSubmitting(false);
     }

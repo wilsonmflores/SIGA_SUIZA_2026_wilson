@@ -58,6 +58,7 @@ describe('Milestone 3: Erradicación Absoluta de Diálogos Nativos del Navegador
       path.join(modulesDir, 'academic/ScheduleBuilder.jsx'),
       path.join(modulesDir, 'evaluation/CoordinatorSupervision.jsx'),
       path.join(modulesDir, 'evaluation/EvaluationDashboard.jsx'),
+      path.join(modulesDir, 'students/StudentMaster.jsx'),
     ];
 
     targetFiles.forEach((filePath) => {

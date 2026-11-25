@@ -114,11 +114,11 @@ class ExcelMineduParser:
                 horas = ExcelMineduParser._find_anchor_value(df_gen, ["n°. horas", "no. horas", "n° horas", "horas"])
                 if horas: 
                     try: plan_data["horas_totales"] = int(float(str(horas).strip()))
-                    except: pass
+                    except (ValueError, TypeError): pass
                 creditos = ExcelMineduParser._find_anchor_value(df_gen, ["n° créditos", "no créditos", "n° creditos", "crédito", "credito"])
                 if creditos:
                     try: plan_data["creditos_totales"] = int(float(str(creditos).strip()))
-                    except: pass
+                    except (ValueError, TypeError): pass
 
             if not plan_data["codigo"]: plan_data["codigo"] = "TMP-" + str(pd.Timestamp.now().timestamp()).replace(".","")[-6:]
             if not plan_data["nombre"]: plan_data["nombre"] = "Plan Extraído (Autogenerado)"
@@ -165,7 +165,7 @@ class ExcelMineduParser:
                                     elif p_str in ["vi", "6"]: current_periodo = 6
                                     else:
                                         try: current_periodo = int(p_str)
-                                        except: pass
+                                        except (ValueError, TypeError): pass
 
                             # Determine periodo using boolean columns if 'periodo' column doesn't exist
                             periodo_for_row = current_periodo
@@ -190,10 +190,10 @@ class ExcelMineduParser:
                             hrs, creds = 0, 0
                             if hr_col is not None and pd.notna(df_mod.iloc[idx, hr_col]):
                                 try: hrs = int(float(str(df_mod.iloc[idx, hr_col]).strip()))
-                                except: pass
+                                except (ValueError, TypeError): pass
                             if cr_col is not None and pd.notna(df_mod.iloc[idx, cr_col]):
                                 try: creds = int(float(str(df_mod.iloc[idx, cr_col]).strip()))
-                                except: pass
+                                except (ValueError, TypeError): pass
                                     
                             if not periodo_for_row:
                                 periodo_for_row = (orden_modulo_idx - 1) * 2 + 1
