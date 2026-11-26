@@ -24,9 +24,12 @@ class SIGAApiClient {
     const timeoutId = controller
       ? setTimeout(() => controller.abort(), timeoutMs)
       : null;
+    // Multipart: el navegador debe calcular el boundary, no fijamos Content-Type.
+    const isFormData =
+      typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData;
     const config = {
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...fetchOptions.headers,
       },
       ...fetchOptions,
@@ -97,6 +100,40 @@ class SIGAApiClient {
       method,
       body: data ? JSON.stringify(data) : null
     });
+  }
+
+  // Subida de archivos (multipart) a un endpoint de módulo
+  async upload(moduleName, endpoint, formData) {
+    return this.request(`/api/${moduleName}/${endpoint}`, {
+      method: 'POST',
+      body: formData,
+      timeoutMs: 120000
+    });
+  }
+
+  // Abre un archivo protegido del backend en una pestaña nueva.
+  // El gateway exige header Authorization, por lo que un <a href> simple
+  // recibiría 401: se descarga como blob con el token y se abre en objectURL.
+  async openFile(fileUrl) {
+    // URLs legadas (simuladas o externas): se abren directamente.
+    if (!fileUrl || !fileUrl.startsWith('/api/')) {
+      window.open(fileUrl, '_blank', 'noopener');
+      return;
+    }
+    const url = `${this.baseURL}${fileUrl}`;
+    const headers = {};
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`No se pudo abrir el archivo (HTTP ${response.status}).`);
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const opened = window.open(objectUrl, '_blank', 'noopener');
+    if (!opened) {
+      throw new Error('El navegador bloqueó la pestaña nueva. Permita las ventanas emergentes.');
+    }
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
   }
 
   // Core system endpoints

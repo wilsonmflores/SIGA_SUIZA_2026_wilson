@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, TIMESTAMP, ForeignKey, JSON, Date
+from sqlalchemy import Column, Integer, String, Text, Boolean, TIMESTAMP, ForeignKey, JSON, Date, LargeBinary
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import BaseModel
@@ -121,6 +121,22 @@ class PlanTrabajoDocente(BaseModel):
     estado = Column(String(30), default="borrador") # borrador, presentado, aprobado, observado
     archivo_url = Column(String(255))
     observaciones = Column(Text)
+
+class ArchivoDocente(BaseModel):
+    """Archivo real (sílabo / plan de trabajo) subido por un docente.
+
+    El binario vive en la base de datos para que sobreviva a los
+    redespliegues de Railway; ``archivo_url`` apunta a
+    ``/api/mod-programas-estudio/archivos/{id}``.
+    """
+    __tablename__ = "archivos_docentes"
+
+    tipo = Column(String(20), nullable=False)  # silabo | plan
+    filename = Column(String(255), nullable=False)
+    content_type = Column(String(100), nullable=False, default="application/octet-stream")
+    size_bytes = Column(Integer, nullable=False, default=0)
+    data = Column(LargeBinary, nullable=False)
+    subido_por = Column(Integer)  # core_users.id (quién lo subió)
 
 class Tutoria(BaseModel):
     """Asignación de Tutoría por Ciclo"""

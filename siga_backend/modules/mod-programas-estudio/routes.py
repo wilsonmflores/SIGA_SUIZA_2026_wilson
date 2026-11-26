@@ -1,11 +1,13 @@
-from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi import APIRouter, HTTPException, Depends, status, Request, UploadFile, File, Form
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete, text
 from typing import List, Optional
 from datetime import datetime, date
 from pydantic import BaseModel, ConfigDict, model_validator
+import os
 from database import get_db, OutboxEvent
-from models import ProgramaEstudio, ProgramaConfiguracion, ProgramaModulo, ProgramaUnidad, ProgramaRequisito, PeriodoAcademico
+from models import ProgramaEstudio, ProgramaConfiguracion, ProgramaModulo, ProgramaUnidad, ProgramaRequisito, PeriodoAcademico, ArchivoDocente
 from shared.identity import (
     Identity, get_identity, es_superadmin, es_coordinador_de, es_coordinador_de_docente
 )
@@ -1167,6 +1169,80 @@ async def obtener_carga_docente(docente_id: int, request: Request, periodo_id: O
     ident = await get_identity(request, db)
     await _validar_acceso_docente(ident, docente_id, db)
     return await listar_carga_docente(docente_id=docente_id, request=request, periodo_id=periodo_id, db=db)
+
+# ---------------------------------------------------------------------------
+# Archivos reales de sílabos y planes de trabajo (guardados en la BD)
+# ---------------------------------------------------------------------------
+
+MAX_ARCHIVO_BYTES = 10 * 1024 * 1024  # 10 MB
+EXTENSIONES_PERMITIDAS = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"}
+
+
+@router.post("/archivos")
+async def subir_archivo(
+    request: Request,
+    file: UploadFile = File(...),
+    tipo: str = Form("silabo"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Sube un archivo real (sílabo/plan) y lo persiste en la base de datos.
+
+    Devuelve la URL pública que debe registrarse en ``archivo_url``.
+    """
+    ident = await get_identity(request, db)
+    if tipo not in ("silabo", "plan"):
+        raise HTTPException(status_code=400, detail="Tipo de archivo no válido (use 'silabo' o 'plan').")
+
+    filename = os.path.basename((file.filename or "").strip())
+    ext = os.path.splitext(filename)[1].lower()
+    if not filename or ext not in EXTENSIONES_PERMITIDAS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de archivo no permitido ({ext or 'sin extensión'}). Use PDF, Word o Excel.",
+        )
+
+    contenido = await file.read(MAX_ARCHIVO_BYTES + 1)
+    if len(contenido) > MAX_ARCHIVO_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo supera el límite de 10 MB.")
+    if not contenido:
+        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+
+    archivo = ArchivoDocente(
+        tipo=tipo,
+        filename=filename,
+        content_type=file.content_type or "application/octet-stream",
+        size_bytes=len(contenido),
+        data=contenido,
+        subido_por=getattr(ident, "user_id", None),
+    )
+    db.add(archivo)
+    await db.commit()
+    await db.refresh(archivo)
+
+    return {
+        "id": archivo.id,
+        "url": f"/api/mod-programas-estudio/archivos/{archivo.id}",
+        "filename": archivo.filename,
+        "size_bytes": archivo.size_bytes,
+    }
+
+
+@router.get("/archivos/{archivo_id}")
+async def descargar_archivo(archivo_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    """Sirve el archivo guardado (requiere sesión autenticada)."""
+    await get_identity(request, db)
+    res = await db.execute(select(ArchivoDocente).where(ArchivoDocente.id == archivo_id))
+    archivo = res.scalar_one_or_none()
+    if not archivo:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    nombre_seguro = archivo.filename.replace('"', "")
+    return Response(
+        content=archivo.data,
+        media_type=archivo.content_type,
+        headers={"Content-Disposition": f'inline; filename="{nombre_seguro}"'},
+    )
+
 
 @router.post("/silabos", response_model=SilaboResponse, status_code=status.HTTP_201_CREATED)
 async def crear_silabo(silabo: SilaboCreate, request: Request, db: AsyncSession = Depends(get_db)):

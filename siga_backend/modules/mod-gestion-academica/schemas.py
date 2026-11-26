@@ -81,6 +81,9 @@ class MatriculaResponse(MatriculaBase):
     id: int
     estado_matricula: str
     detalles: List[MatriculaDetalleResponse] = []
+    # Correo de la cuenta creada automáticamente para el estudiante en esta
+    # matrícula (None si ya tenía cuenta). Solo informativo para el frontend.
+    cuenta_estudiante_email: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class IngestaAdmitido(BaseModel):

@@ -28,6 +28,7 @@ from sqlalchemy.orm import selectinload
 from config import enrollment_settings
 from database import OutboxEvent, get_db
 from program_validation import validar_programa_activo
+from cuentas_estudiante import asegurar_cuenta_estudiante
 from domain import (
     Casuistica,
     EstadoCurso,
@@ -430,6 +431,9 @@ async def matricular_ingresantes(
         est.estado_academico = "matriculado"
         est.ciclo_actual = propuesta.ciclo_sugerido
 
+        # Cuenta automática del ingresante (1a matrícula): correo @siga.edu, contraseña = DNI.
+        cuenta_email = await asegurar_cuenta_estudiante(db, est)
+
         publicar(db, "gestion_academica.matricula.confirmada", {
             "matricula_id": matricula.id, "estudiante_id": est.id,
             "ciclo": propuesta.ciclo_sugerido, "casuistica": propuesta.casuistica,
@@ -443,6 +447,7 @@ async def matricular_ingresantes(
             "codigo_estudiante": est.codigo_estudiante,
             "ciclo": propuesta.ciclo_sugerido,
             "unidades": len(unidades),
+            "cuenta_creada": cuenta_email,
         })
 
     await db.commit()
@@ -954,6 +959,13 @@ async def consolidar_matricula(matricula_id: int, request: Request, db: AsyncSes
     matricula.consolidada = True
     pasos.append({"paso": 1, "descripcion": "Matrícula consolidada y registro académico generado",
                   "registro_academico": matricula.registro_academico})
+
+    # Seguro adicional: si esta matrícula es la primera del alumno y aún no
+    # tiene cuenta (flujo anterior a la automatización), se crea aquí.
+    res_est = await db.execute(select(Estudiante).where(Estudiante.id == matricula.estudiante_id))
+    est_consolidar = res_est.scalar_one_or_none()
+    if est_consolidar:
+        await asegurar_cuenta_estudiante(db, est_consolidar)
 
     # 2. Asignar códigos, horarios y docentes (carga lectiva)
     carga = await fetch_cargaLectiva(matricula.programa_id, matricula.periodo_id)

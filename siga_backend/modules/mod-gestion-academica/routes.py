@@ -7,6 +7,7 @@ from database import get_db, OutboxEvent
 from models import Estudiante, Matricula, MatriculaDetalle
 from schemas import EstudianteCreate, EstudianteResponse, EstudianteUpdate, MatriculaCreate, MatriculaResponse, IngestaMasivaRequest
 from program_validation import validar_programa_activo, contar_referencias
+from cuentas_estudiante import asegurar_cuenta_estudiante
 from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
@@ -201,15 +202,23 @@ async def ingesta_admitidos(request: Request, data: IngestaMasivaRequest, db: As
 @router.post("/estudiantes/", response_model=EstudianteResponse, status_code=status.HTTP_201_CREATED)
 async def crear_estudiante(request: Request, data: EstudianteCreate, db: AsyncSession = Depends(get_db)):
     await validar_programa_activo(db, data.programa_id)
-    existing = await db.execute(select(Estudiante).where(
-        or_(Estudiante.dni == data.dni, Estudiante.codigo_estudiante == data.codigo_estudiante)
-    ))
+    condiciones = [
+        Estudiante.dni == data.dni,
+        Estudiante.codigo_estudiante == data.codigo_estudiante,
+    ]
+    # El correo institucional es unico en BD: validarlo aqui para devolver un
+    # 00 amigable en lugar de un 500 por IntegrityError.
+    if getattr(data, "email_institucional", None):
+        condiciones.append(Estudiante.email_institucional == data.email_institucional)
+    existing = await db.execute(select(Estudiante).where(or_(*condiciones)))
     existing_student = existing.scalar_one_or_none()
     if existing_student:
         if existing_student.dni == data.dni:
             raise HTTPException(status_code=400, detail="El DNI ya se encuentra registrado en el sistema.")
-        else:
+        elif existing_student.codigo_estudiante == data.codigo_estudiante:
             raise HTTPException(status_code=400, detail="El código de estudiante ya existe. Genere uno nuevo.")
+        else:
+            raise HTTPException(status_code=400, detail="El correo institucional ya está registrado para otro estudiante.")
 
     db_estudiante = Estudiante(**data.model_dump())
     db.add(db_estudiante)
@@ -775,7 +784,15 @@ async def realizar_matricula(request: Request, data: MatriculaCreate, db: AsyncS
     for det in data.detalles:
         db_detalle = MatriculaDetalle(matricula_id=db_matricula.id, **det.model_dump())
         db.add(db_detalle)
-    
+
+    # Cuenta automática del estudiante en su 1a matrícula:
+    # correo @siga.edu generado con su nombre, contraseña = DNI, rol estudiante.
+    res_est = await db.execute(select(Estudiante).where(Estudiante.id == data.estudiante_id))
+    estudiante = res_est.scalar_one_or_none()
+    cuenta_email = None
+    if estudiante:
+        cuenta_email = await asegurar_cuenta_estudiante(db, estudiante)
+
     event_payload = {
         "event_id": str(uuid.uuid4()),
         "event_type": "gestion_academica.matricula.confirmada",
@@ -790,7 +807,10 @@ async def realizar_matricula(request: Request, data: MatriculaCreate, db: AsyncS
     await db.commit()
     
     result = await db.execute(select(Matricula).options(selectinload(Matricula.detalles)).where(Matricula.id == db_matricula.id))
-    return result.scalar_one()
+    matricula_resp = result.scalar_one()
+    # Informa al frontend si en esta matrícula se creó la cuenta del alumno.
+    matricula_resp.cuenta_estudiante_email = cuenta_email
+    return matricula_resp
 
 @router.get("/matriculas/", response_model=List[MatriculaResponse])
 async def obtener_matriculas(db: AsyncSession = Depends(get_db)):
@@ -857,6 +877,8 @@ async def sincronizar_estudiantes_seccion(unidad_id: int, periodo_id: int, reque
         return []
         
     for est in estudiantes:
+        # Cuenta automática (idempotente): si el alumno aún no tiene la suya, se crea.
+        await asegurar_cuenta_estudiante(db, est)
         res_mat = await db.execute(
             select(Matricula).where(Matricula.estudiante_id == est.id).where(Matricula.periodo_id == periodo_id)
         )

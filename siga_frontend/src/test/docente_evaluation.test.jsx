@@ -17,7 +17,9 @@ vi.mock('../core/auth/useAuth', () => ({
 // Mock de apiClient
 vi.mock('../core/api/client', () => ({
   apiClient: {
-    request: vi.fn()
+    request: vi.fn(),
+    upload: vi.fn(),
+    openFile: vi.fn()
   }
 }));
 
@@ -575,13 +577,14 @@ describe('Auditoría Frontend - Rol Docente (EvaluationDashboard & DocentePlanni
 
   it('13. DocentePlanning permite subir sílabo enviando POST con carga_lectiva_id al backend', async () => {
     window.alert = vi.fn();
+    apiClient.upload.mockResolvedValue({ id: 7, url: '/api/mod-programas-estudio/archivos/7' });
     apiClient.request.mockImplementation((endpoint, options) => {
       if (options?.method === 'POST' && endpoint.includes('/silabos')) {
         return Promise.resolve({
           id: 10,
           carga_lectiva_id: 1,
           estado: 'presentado',
-          archivo_url: '/docs/silabos/mi_silabo.pdf'
+          archivo_url: '/api/mod-programas-estudio/archivos/7'
         });
       }
       if (endpoint.includes('/programas-estudio/programas') && !endpoint.includes('/malla')) {
@@ -626,6 +629,13 @@ describe('Auditoría Frontend - Rol Docente (EvaluationDashboard & DocentePlanni
     fireEvent.change(silaboInput, { target: { files: [fakeFile] } });
 
     await waitFor(() => {
+      // Primero sube el archivo real al backend...
+      expect(apiClient.upload).toHaveBeenCalledWith(
+        'mod-programas-estudio',
+        'archivos',
+        expect.any(FormData)
+      );
+      // ...y registra el sílabo con la URL devuelta
       expect(apiClient.request).toHaveBeenCalledWith(
         '/api/mod-programas-estudio/silabos',
         expect.objectContaining({
@@ -633,7 +643,7 @@ describe('Auditoría Frontend - Rol Docente (EvaluationDashboard & DocentePlanni
           body: JSON.stringify({
             carga_lectiva_id: 1,
             estado: 'presentado',
-            archivo_url: '/docs/silabos/mi_silabo.pdf'
+            archivo_url: '/api/mod-programas-estudio/archivos/7'
           })
         })
       );
@@ -644,6 +654,7 @@ describe('Auditoría Frontend - Rol Docente (EvaluationDashboard & DocentePlanni
 
   it('14. DocentePlanning permite subir plan de trabajo enviando POST con periodo_id y programa_id', async () => {
     window.alert = vi.fn();
+    apiClient.upload.mockResolvedValue({ id: 8, url: '/api/mod-programas-estudio/archivos/8' });
     apiClient.request.mockImplementation((endpoint, options) => {
       if (options?.method === 'POST' && endpoint.includes('/planes-trabajo')) {
         return Promise.resolve({
@@ -652,7 +663,7 @@ describe('Auditoría Frontend - Rol Docente (EvaluationDashboard & DocentePlanni
           programa_id: 1,
           docente_id: 10,
           estado: 'presentado',
-          archivo_url: '/docs/planes/plan_anual.pdf'
+          archivo_url: '/api/mod-programas-estudio/archivos/8'
         });
       }
       if (endpoint.includes('/programas-estudio/programas') && !endpoint.includes('/malla')) {
@@ -697,6 +708,11 @@ describe('Auditoría Frontend - Rol Docente (EvaluationDashboard & DocentePlanni
     fireEvent.change(planInput, { target: { files: [fakeFile] } });
 
     await waitFor(() => {
+      expect(apiClient.upload).toHaveBeenCalledWith(
+        'mod-programas-estudio',
+        'archivos',
+        expect.any(FormData)
+      );
       expect(apiClient.request).toHaveBeenCalledWith(
         '/api/mod-programas-estudio/planes-trabajo',
         expect.objectContaining({
@@ -706,7 +722,7 @@ describe('Auditoría Frontend - Rol Docente (EvaluationDashboard & DocentePlanni
             programa_id: 1,
             docente_id: 10,
             estado: 'presentado',
-            archivo_url: '/docs/planes/plan_anual.pdf'
+            archivo_url: '/api/mod-programas-estudio/archivos/8'
           })
         })
       );
