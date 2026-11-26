@@ -72,13 +72,15 @@ async def asegurar_cuenta_estudiante(db: AsyncSession, estudiante) -> str | None
         getattr(estudiante, "email_institucional", None) or ""
     ).strip().lower()
 
-    if email_actual:
+    if email_actual.endswith("@siga.edu"):
         if await _existe_usuario(db, email_actual):
             return None  # ya tiene cuenta
         candidatos = [email_actual] + [
             c for c in candidatos_email(estudiante) if c != email_actual
         ]
     else:
+        # Vacio o correo personal (gmail, etc.): la cuenta SIEMPRE se genera
+        # con el nombre del alumno (@siga.edu), nunca con el correo personal.
         candidatos = candidatos_email(estudiante)
 
     hash_dni = bcrypt.hashpw(dni.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")

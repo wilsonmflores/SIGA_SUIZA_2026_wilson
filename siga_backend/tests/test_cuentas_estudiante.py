@@ -123,6 +123,32 @@ async def test_homonimo_recibe_correo_con_dni(db_session, fixture_estudiante, cu
     assert bcrypt.checkpw(b"00000002", u2["hashed_password"].encode("utf-8"))
 
 
+async def test_correo_personal_no_se_usa_como_institucional(
+    db_session, fixture_estudiante, cuentas_mod
+):
+    """Si el alumno tiene un gmail en email_institucional, la cuenta se genera
+    con su nombre @siga.edu (regla: correo = nombre, contraseña = DNI)."""
+    await db_session.execute(
+        text("UPDATE estudiantes SET email_institucional = 'alumno.personal@gmail.com' WHERE id = 100")
+    )
+    await db_session.commit()
+
+    est = await _estudiante_orm(db_session, 100)
+    email = await cuentas_mod.asegurar_cuenta_estudiante(db_session, est)
+    await db_session.commit()
+
+    assert email == "estudiante.prueba.siga@siga.edu"
+    # La ficha queda con el correo institucional, no con el personal
+    assert est.email_institucional == "estudiante.prueba.siga@siga.edu"
+    # Y no se creó ninguna cuenta con el gmail personal
+    total_gmail = (
+        await db_session.execute(
+            text("SELECT COUNT(*) FROM core_users WHERE lower(email) LIKE '%gmail.com'")
+        )
+    ).scalar()
+    assert total_gmail == 0
+
+
 async def test_no_toca_cuentas_existentes(db_session, fixture_estudiante, cuentas_mod):
     """Un estudiante cuyo correo institucional ya tiene usuario no se duplica."""
     await db_session.execute(
